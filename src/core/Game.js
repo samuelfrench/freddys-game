@@ -15,6 +15,7 @@ import { Player } from '../entities/Player.js';
 import { NinjaCastle } from '../entities/NinjaCastle.js';
 import { UIManager } from '../systems/UIManager.js';
 import { Minimap } from '../systems/Minimap.js';
+import { qualitySettings } from '../systems/QualitySettings.js';
 
 export class Game {
     constructor() {
@@ -23,6 +24,11 @@ export class Game {
         this.clock = new THREE.Clock();
         this.deltaTime = 0;
         this.elapsedTime = 0;
+
+        // FPS tracking
+        this.frameCount = 0;
+        this.fpsTime = 0;
+        this.currentFPS = 0;
 
         // Core systems
         this.scene = null;
@@ -162,6 +168,27 @@ export class Game {
                 this.pause();
             }
         });
+
+        // Quality toggle button
+        const qualityToggle = document.getElementById('quality-toggle');
+        const qualityValue = document.getElementById('quality-value');
+
+        // Set initial quality display
+        qualityValue.textContent = qualitySettings.getPresetName();
+
+        qualityToggle.addEventListener('click', () => {
+            const newQuality = qualitySettings.cycleQuality();
+            qualityValue.textContent = newQuality;
+
+            // Apply to castle
+            if (this.castle) {
+                this.castle.applyQualitySettings();
+            }
+        });
+
+        // Load saved quality preference
+        qualitySettings.loadSavedQuality();
+        qualityValue.textContent = qualitySettings.getPresetName();
     }
 
     onWindowResize() {
@@ -193,6 +220,16 @@ export class Game {
 
         this.deltaTime = Math.min(this.clock.getDelta(), 0.1);
         this.elapsedTime = this.clock.getElapsedTime();
+
+        // FPS tracking
+        this.frameCount++;
+        this.fpsTime += this.deltaTime;
+        if (this.fpsTime >= 1.0) {
+            this.currentFPS = Math.round(this.frameCount / this.fpsTime);
+            document.getElementById('fps-counter').textContent = `FPS: ${this.currentFPS}`;
+            this.frameCount = 0;
+            this.fpsTime = 0;
+        }
 
         // Update all systems
         this.update();
@@ -230,8 +267,8 @@ export class Game {
         // Update minimap
         this.minimap.update();
 
-        // Update castle animations
-        this.castle.update(this.deltaTime, this.elapsedTime);
+        // Update castle animations and frustum culling
+        this.castle.update(this.deltaTime, this.elapsedTime, this.camera);
     }
 
     handleCombatResults(results) {

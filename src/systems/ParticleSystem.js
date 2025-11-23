@@ -1,13 +1,14 @@
 /**
- * Particle System - GPU-accelerated particle effects
+ * Particle System - GPU-accelerated particle effects with quality settings
  */
 
 import * as THREE from 'three';
+import { qualitySettings } from './QualitySettings.js';
 
 class ParticleEmitter {
     constructor(scene, config) {
         this.scene = scene;
-        this.config = {
+        this.baseConfig = {
             maxParticles: config.maxParticles || 100,
             particleSize: config.particleSize || 0.1,
             color: config.color || 0xffffff,
@@ -18,6 +19,18 @@ class ParticleEmitter {
             fade: config.fade !== false,
             shrink: config.shrink || false,
             emissive: config.emissive || false
+        };
+
+        // Apply quality multiplier
+        const multiplier = qualitySettings.get('particleMultiplier') || 1;
+        const maxAllowed = qualitySettings.get('maxParticles') || 2000;
+
+        this.config = {
+            ...this.baseConfig,
+            maxParticles: Math.min(
+                Math.floor(this.baseConfig.maxParticles * multiplier),
+                maxAllowed
+            )
         };
 
         this.particles = [];
@@ -80,26 +93,30 @@ class ParticleEmitter {
 
     createParticleTexture() {
         const canvas = document.createElement('canvas');
-        canvas.width = 64;
-        canvas.height = 64;
+        canvas.width = 32; // Reduced from 64 for performance
+        canvas.height = 32;
 
         const ctx = canvas.getContext('2d');
-        const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
         gradient.addColorStop(0, 'rgba(255,255,255,1)');
         gradient.addColorStop(0.3, 'rgba(255,255,255,0.8)');
         gradient.addColorStop(1, 'rgba(255,255,255,0)');
 
         ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 64, 64);
+        ctx.fillRect(0, 0, 32, 32);
 
         const texture = new THREE.CanvasTexture(canvas);
         return texture;
     }
 
     emit(position, count = 1, overrides = {}) {
+        // Apply quality multiplier to emission count
+        const multiplier = qualitySettings.get('particleMultiplier') || 1;
+        const adjustedCount = Math.max(1, Math.floor(count * multiplier));
+
         const color = new THREE.Color(overrides.color || this.config.color);
 
-        for (let i = 0; i < count; i++) {
+        for (let i = 0; i < adjustedCount; i++) {
             if (this.particles.length >= this.config.maxParticles) {
                 // Remove oldest particle
                 this.particles.shift();
@@ -201,6 +218,22 @@ export class ParticleSystem {
 
         // Create pre-configured emitters
         this.createEmitters();
+
+        // Listen for quality changes
+        qualitySettings.onChange(() => {
+            this.recreateEmitters();
+        });
+    }
+
+    recreateEmitters() {
+        // Dispose old emitters
+        for (const emitter of this.emitters.values()) {
+            emitter.dispose();
+        }
+        this.emitters.clear();
+
+        // Create new emitters with updated settings
+        this.createEmitters();
     }
 
     createEmitters() {
@@ -301,9 +334,10 @@ export class ParticleSystem {
                 break;
 
             case 'spin':
-                // Ring of particles
-                for (let i = 0; i < 12; i++) {
-                    const angle = (i / 12) * Math.PI * 2;
+                // Ring of particles - reduced iterations on low quality
+                const segments = qualitySettings.get('particleMultiplier') < 0.5 ? 6 : 12;
+                for (let i = 0; i < segments; i++) {
+                    const angle = (i / segments) * Math.PI * 2;
                     const offset = new THREE.Vector3(
                         Math.cos(angle) * 2,
                         0.5,
@@ -334,8 +368,9 @@ export class ParticleSystem {
         this.emitters.get('death').emit(position, 50);
         this.emitters.get('blood').emit(position, 30);
 
-        // Upward burst
-        for (let i = 0; i < 5; i++) {
+        // Upward burst - reduced on low quality
+        const burstCount = qualitySettings.get('particleMultiplier') < 0.5 ? 2 : 5;
+        for (let i = 0; i < burstCount; i++) {
             const offset = new THREE.Vector3(
                 (Math.random() - 0.5) * 2,
                 i * 0.3,

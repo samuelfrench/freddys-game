@@ -1,8 +1,9 @@
 /**
- * Advanced Renderer with Post-Processing Effects
+ * Advanced Renderer with Post-Processing Effects and Quality Settings
  */
 
 import * as THREE from 'three';
+import { qualitySettings } from '../systems/QualitySettings.js';
 
 export class Renderer {
     constructor(scene, camera) {
@@ -16,21 +17,31 @@ export class Renderer {
         // Shader passes
         this.bloomPass = null;
         this.fxaaPass = null;
+
+        // Quality settings
+        this.settings = qualitySettings.settings;
+
+        // Listen for quality changes
+        qualitySettings.onChange((newSettings) => {
+            this.applyQualitySettings(newSettings);
+        });
     }
 
     async init() {
-        // Create WebGL renderer with advanced settings
+        const settings = qualitySettings.settings;
+
+        // Create WebGL renderer with quality-based settings
         this.renderer = new THREE.WebGLRenderer({
-            antialias: true,
+            antialias: settings.antialias,
             powerPreference: 'high-performance',
             stencil: false
         });
 
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.renderer.setPixelRatio(Math.min(settings.pixelRatio, 2));
 
-        // Enable shadows
-        this.renderer.shadowMap.enabled = true;
+        // Enable shadows based on quality
+        this.renderer.shadowMap.enabled = settings.shadows;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
         // Tone mapping for HDR-like effects
@@ -44,14 +55,20 @@ export class Renderer {
         document.getElementById('game-container').appendChild(this.renderer.domElement);
 
         // Setup custom post-processing
-        await this.setupPostProcessing();
+        if (settings.postProcessing) {
+            await this.setupPostProcessing();
+        }
+
+        this.postProcessingEnabled = settings.postProcessing;
     }
 
     async setupPostProcessing() {
+        const pixelRatio = qualitySettings.get('pixelRatio') || 1;
+
         // Create render targets for multi-pass rendering
         this.renderTarget = new THREE.WebGLRenderTarget(
-            window.innerWidth * Math.min(window.devicePixelRatio, 2),
-            window.innerHeight * Math.min(window.devicePixelRatio, 2),
+            window.innerWidth * Math.min(pixelRatio, 2),
+            window.innerHeight * Math.min(pixelRatio, 2),
             {
                 minFilter: THREE.LinearFilter,
                 magFilter: THREE.LinearFilter,
@@ -68,15 +85,18 @@ export class Renderer {
     }
 
     createPostProcessQuad() {
+        const settings = qualitySettings.settings;
+
         // Custom shader for bloom + vignette + chromatic aberration
         const shader = {
             uniforms: {
                 tDiffuse: { value: null },
                 uTime: { value: 0 },
                 uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
-                uBloomStrength: { value: 0.3 },
-                uVignetteStrength: { value: 0.4 },
-                uChromaticAberration: { value: 0.002 }
+                uBloomStrength: { value: settings.bloomEnabled ? 0.3 : 0.0 },
+                uVignetteStrength: { value: settings.vignetteEnabled ? 0.4 : 0.0 },
+                uChromaticAberration: { value: settings.chromaticAberration ? 0.002 : 0.0 },
+                uFilmGrain: { value: settings.filmGrain ? 0.03 : 0.0 }
             },
             vertexShader: `
                 varying vec2 vUv;
@@ -92,10 +112,14 @@ export class Renderer {
                 uniform float uBloomStrength;
                 uniform float uVignetteStrength;
                 uniform float uChromaticAberration;
+                uniform float uFilmGrain;
 
                 varying vec2 vUv;
 
                 vec3 sampleWithCA(vec2 uv) {
+                    if (uChromaticAberration <= 0.0) {
+                        return texture2D(tDiffuse, uv).rgb;
+                    }
                     vec2 center = vec2(0.5);
                     vec2 dir = uv - center;
                     float dist = length(dir);
@@ -108,13 +132,17 @@ export class Renderer {
                 }
 
                 vec3 blur(vec2 uv, float radius) {
+                    if (uBloomStrength <= 0.0) {
+                        return texture2D(tDiffuse, uv).rgb;
+                    }
                     vec3 color = vec3(0.0);
                     float total = 0.0;
 
-                    for (float x = -2.0; x <= 2.0; x += 1.0) {
-                        for (float y = -2.0; y <= 2.0; y += 1.0) {
+                    // Reduced blur samples for performance
+                    for (float x = -1.0; x <= 1.0; x += 1.0) {
+                        for (float y = -1.0; y <= 1.0; y += 1.0) {
                             vec2 offset = vec2(x, y) * radius / uResolution;
-                            float weight = 1.0 - length(vec2(x, y)) / 3.0;
+                            float weight = 1.0 - length(vec2(x, y)) / 2.0;
                             color += texture2D(tDiffuse, uv + offset).rgb * weight;
                             total += weight;
                         }
@@ -128,20 +156,26 @@ export class Renderer {
                     vec3 color = sampleWithCA(vUv);
 
                     // Simple bloom (bright areas glow)
-                    vec3 blurred = blur(vUv, 3.0);
-                    float brightness = dot(blurred, vec3(0.2126, 0.7152, 0.0722));
-                    vec3 bloom = blurred * smoothstep(0.5, 1.0, brightness) * uBloomStrength;
-                    color += bloom;
+                    if (uBloomStrength > 0.0) {
+                        vec3 blurred = blur(vUv, 2.0);
+                        float brightness = dot(blurred, vec3(0.2126, 0.7152, 0.0722));
+                        vec3 bloom = blurred * smoothstep(0.5, 1.0, brightness) * uBloomStrength;
+                        color += bloom;
+                    }
 
                     // Vignette
-                    vec2 center = vUv - 0.5;
-                    float dist = length(center);
-                    float vignette = 1.0 - smoothstep(0.3, 0.9, dist) * uVignetteStrength;
-                    color *= vignette;
+                    if (uVignetteStrength > 0.0) {
+                        vec2 center = vUv - 0.5;
+                        float dist = length(center);
+                        float vignette = 1.0 - smoothstep(0.3, 0.9, dist) * uVignetteStrength;
+                        color *= vignette;
+                    }
 
                     // Film grain
-                    float grain = (fract(sin(dot(vUv * uTime, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.03;
-                    color += grain;
+                    if (uFilmGrain > 0.0) {
+                        float grain = (fract(sin(dot(vUv * uTime, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * uFilmGrain;
+                        color += grain;
+                    }
 
                     // Color grading - slight teal shadows, orange highlights
                     vec3 shadows = vec3(0.0, 0.05, 0.1);
@@ -160,17 +194,46 @@ export class Renderer {
         return new THREE.Mesh(geometry, material);
     }
 
+    applyQualitySettings(settings) {
+        this.settings = settings;
+        this.postProcessingEnabled = settings.postProcessing;
+
+        if (this.renderer) {
+            this.renderer.setPixelRatio(Math.min(settings.pixelRatio, 2));
+            this.renderer.shadowMap.enabled = settings.shadows;
+        }
+
+        if (this.postProcessQuad && this.postProcessQuad.material) {
+            const uniforms = this.postProcessQuad.material.uniforms;
+            uniforms.uBloomStrength.value = settings.bloomEnabled ? 0.3 : 0.0;
+            uniforms.uVignetteStrength.value = settings.vignetteEnabled ? 0.4 : 0.0;
+            uniforms.uChromaticAberration.value = settings.chromaticAberration ? 0.002 : 0.0;
+            uniforms.uFilmGrain.value = settings.filmGrain ? 0.03 : 0.0;
+        }
+
+        // Re-setup post processing if needed
+        if (settings.postProcessing && !this.renderTarget) {
+            this.setupPostProcessing();
+        }
+    }
+
     setSize(width, height) {
+        const pixelRatio = qualitySettings.get('pixelRatio') || 1;
+
         this.renderer.setSize(width, height);
-        this.renderTarget.setSize(
-            width * Math.min(window.devicePixelRatio, 2),
-            height * Math.min(window.devicePixelRatio, 2)
-        );
-        this.postProcessQuad.material.uniforms.uResolution.value.set(width, height);
+        if (this.renderTarget) {
+            this.renderTarget.setSize(
+                width * Math.min(pixelRatio, 2),
+                height * Math.min(pixelRatio, 2)
+            );
+        }
+        if (this.postProcessQuad) {
+            this.postProcessQuad.material.uniforms.uResolution.value.set(width, height);
+        }
     }
 
     render(time) {
-        if (this.postProcessingEnabled) {
+        if (this.postProcessingEnabled && this.renderTarget) {
             // Render scene to texture
             this.renderer.setRenderTarget(this.renderTarget);
             this.renderer.render(this.scene, this.camera);
@@ -187,8 +250,12 @@ export class Renderer {
 
     dispose() {
         this.renderer.dispose();
-        this.renderTarget.dispose();
-        this.postProcessQuad.geometry.dispose();
-        this.postProcessQuad.material.dispose();
+        if (this.renderTarget) {
+            this.renderTarget.dispose();
+        }
+        if (this.postProcessQuad) {
+            this.postProcessQuad.geometry.dispose();
+            this.postProcessQuad.material.dispose();
+        }
     }
 }

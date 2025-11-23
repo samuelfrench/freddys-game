@@ -405,6 +405,50 @@
             transform: scale(1.05);
             box-shadow: 0 0 20px rgba(233,69,96,0.5);
         }
+
+        #quality-toggle {
+            position: fixed;
+            top: 20px;
+            right: 180px;
+            background: rgba(0,0,0,0.6);
+            border: 2px solid rgba(255,255,255,0.3);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            z-index: 101;
+            transition: all 0.2s ease;
+            pointer-events: auto;
+        }
+
+        #quality-toggle:hover {
+            background: rgba(233,69,96,0.4);
+            border-color: #e94560;
+        }
+
+        #quality-toggle .quality-label {
+            opacity: 0.7;
+            font-size: 0.75rem;
+        }
+
+        #quality-toggle .quality-value {
+            font-weight: bold;
+            color: #4ecdc4;
+        }
+
+        #fps-counter {
+            position: fixed;
+            top: 60px;
+            right: 180px;
+            background: rgba(0,0,0,0.4);
+            color: #4ecdc4;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            z-index: 101;
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
@@ -488,6 +532,13 @@
     <div id="damage-overlay"></div>
 
     <div id="notification"></div>
+
+    <button id="quality-toggle">
+        <span class="quality-label">Quality:</span>
+        <span class="quality-value" id="quality-value">High</span>
+    </button>
+
+    <div id="fps-counter">FPS: --</div>
 
     <div id="pause-menu">
         <div class="pause-title">PAUSED</div>

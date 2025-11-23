@@ -1,8 +1,10 @@
 /**
  * Ninja Castle - Procedurally generated Japanese castle environment
+ * With frustum culling and LOD support for performance
  */
 
 import * as THREE from 'three';
+import { qualitySettings } from '../systems/QualitySettings.js';
 
 export class NinjaCastle {
     constructor(scene, physicsSystem) {
@@ -12,6 +14,11 @@ export class NinjaCastle {
         this.lights = [];
         this.torches = [];
         this.animatedObjects = [];
+
+        // Performance: Track meshes for frustum culling
+        this.culledMeshes = [];
+        this.frustum = new THREE.Frustum();
+        this.projScreenMatrix = new THREE.Matrix4();
 
         // Castle layout
         this.bounds = {
@@ -969,22 +976,87 @@ export class NinjaCastle {
         return [start, end, to];
     }
 
-    update(deltaTime, elapsedTime) {
-        // Animate torches
-        for (const torch of this.torches) {
-            const flicker = Math.sin(elapsedTime * 10) * 0.3 +
-                Math.sin(elapsedTime * 15) * 0.2 +
-                Math.sin(elapsedTime * 7) * 0.1;
+    update(deltaTime, elapsedTime, camera) {
+        // Animate torches (skip on low quality)
+        const particleMultiplier = qualitySettings.get('particleMultiplier') || 1;
+        if (particleMultiplier > 0.25) {
+            for (const torch of this.torches) {
+                const flicker = Math.sin(elapsedTime * 10) * 0.3 +
+                    Math.sin(elapsedTime * 15) * 0.2 +
+                    Math.sin(elapsedTime * 7) * 0.1;
 
-            torch.light.intensity = 1 + flicker * 0.3;
-            torch.flame.scale.y = 1 + flicker * 0.2;
-            torch.flame.rotation.z = flicker * 0.2;
+                torch.light.intensity = 1 + flicker * 0.3;
+                torch.flame.scale.y = 1 + flicker * 0.2;
+                torch.flame.rotation.z = flicker * 0.2;
+            }
         }
 
         // Animate water
         for (const obj of this.animatedObjects) {
             if (obj.type === 'water') {
                 obj.mesh.position.y = 0.01 + Math.sin(elapsedTime * 2) * 0.02;
+            }
+        }
+
+        // Frustum culling for performance
+        if (camera) {
+            this.updateFrustumCulling(camera);
+        }
+    }
+
+    updateFrustumCulling(camera) {
+        // Update frustum from camera
+        this.projScreenMatrix.multiplyMatrices(
+            camera.projectionMatrix,
+            camera.matrixWorldInverse
+        );
+        this.frustum.setFromProjectionMatrix(this.projScreenMatrix);
+
+        const drawDistance = qualitySettings.get('drawDistance') || 100;
+
+        // Cull distant or off-screen objects
+        this.castle.traverse((child) => {
+            if (child.isMesh) {
+                // Skip small objects
+                if (!child.geometry.boundingSphere) {
+                    child.geometry.computeBoundingSphere();
+                }
+
+                const worldPos = new THREE.Vector3();
+                child.getWorldPosition(worldPos);
+                const distanceToCamera = worldPos.distanceTo(camera.position);
+
+                // Distance culling
+                if (distanceToCamera > drawDistance) {
+                    child.visible = false;
+                    return;
+                }
+
+                // Frustum culling
+                if (child.geometry.boundingSphere) {
+                    const sphere = child.geometry.boundingSphere.clone();
+                    sphere.center.copy(worldPos);
+                    child.visible = this.frustum.intersectsSphere(sphere);
+                }
+            }
+        });
+    }
+
+    // Disable torch lights on low quality
+    applyQualitySettings() {
+        const shadows = qualitySettings.get('shadows');
+        const particleMultiplier = qualitySettings.get('particleMultiplier') || 1;
+
+        for (const torch of this.torches) {
+            torch.light.castShadow = shadows;
+            // Reduce light range on low quality
+            torch.light.distance = particleMultiplier < 0.5 ? 8 : 15;
+        }
+
+        // Disable some lights on low quality
+        if (particleMultiplier < 0.5) {
+            for (let i = 0; i < this.lights.length; i++) {
+                this.lights[i].visible = i % 2 === 0; // Show every other light
             }
         }
     }
