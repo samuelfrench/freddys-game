@@ -95,7 +95,7 @@ describe('PhysicsSystem', () => {
             expect(physics.getGroundHeight(position)).toBe(0);
         });
 
-        it('should return platform height when position is above a box', () => {
+        it('should return platform height when player is standing on a box', () => {
             physics.addStaticBody({
                 type: 'box',
                 position: new THREE.Vector3(0, 1, 0),
@@ -103,25 +103,46 @@ describe('PhysicsSystem', () => {
             });
 
             const position = new THREE.Vector3(0, 5, 0);
+            const currentY = 3.7; // Player standing on platform (feet at y=2)
 
-            expect(physics.getGroundHeight(position)).toBe(2);
+            expect(physics.getGroundHeight(position, currentY)).toBe(2);
         });
 
-        it('should return highest platform when stacked', () => {
+        it('should return highest reachable platform when stacked', () => {
+            // Lower platform (top at y=2)
             physics.addStaticBody({
                 type: 'box',
                 position: new THREE.Vector3(0, 1, 0),
                 size: new THREE.Vector3(4, 2, 4)
             });
+            // Higher platform (top at y=5)
             physics.addStaticBody({
                 type: 'box',
                 position: new THREE.Vector3(0, 4, 0),
                 size: new THREE.Vector3(2, 2, 2)
             });
 
+            // Player standing on lower platform can't reach upper (3 units above)
             const position = new THREE.Vector3(0, 10, 0);
+            const currentY = 3.7; // Player on lower platform (feet at y=2)
 
-            expect(physics.getGroundHeight(position)).toBe(5);
+            // Should return lower platform, not upper (which is too high to step onto)
+            expect(physics.getGroundHeight(position, currentY)).toBe(2);
+        });
+
+        it('should allow stepping onto nearby platforms', () => {
+            // Platform at y=0.5 (top at y=0.75)
+            physics.addStaticBody({
+                type: 'box',
+                position: new THREE.Vector3(0, 0.5, 0),
+                size: new THREE.Vector3(4, 0.5, 4)
+            });
+
+            const position = new THREE.Vector3(0, 5, 0);
+            const currentY = 1.7; // Player at ground level (feet at y=0)
+
+            // Platform top (0.75) is within step height of feet (0)
+            expect(physics.getGroundHeight(position, currentY)).toBe(0.75);
         });
     });
 
