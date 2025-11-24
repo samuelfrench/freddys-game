@@ -54,6 +54,9 @@ export class NinjaCastle {
         // Add decorations
         this.createDecorations();
 
+        // Create forest area
+        this.createForest();
+
         // Setup lighting
         this.createLighting();
 
@@ -983,6 +986,343 @@ export class NinjaCastle {
         this.castle.add(group);
     }
 
+    createForest() {
+        // Forest extends beyond the castle walls in the negative Z direction
+        // Creates a path through the forest leading to a shrine (the goal)
+        const forestGroup = new THREE.Group();
+        forestGroup.position.set(0, 0, -60);
+
+        // Forest ground - darker earth tone
+        const forestGroundGeometry = new THREE.PlaneGeometry(80, 120);
+        const forestGroundMaterial = new THREE.MeshStandardMaterial({
+            color: 0x2a3a2a,
+            roughness: 0.95
+        });
+        const forestGround = new THREE.Mesh(forestGroundGeometry, forestGroundMaterial);
+        forestGround.rotation.x = -Math.PI / 2;
+        forestGround.position.z = -30;
+        forestGround.receiveShadow = true;
+        forestGroup.add(forestGround);
+
+        // Add physics for forest ground
+        this.physicsSystem.addStaticBody({
+            type: 'box',
+            position: new THREE.Vector3(0, -0.1, -90),
+            size: new THREE.Vector3(80, 0.2, 120)
+        });
+
+        // Create dense forest trees on both sides of a winding path
+        const treePositions = [];
+
+        // Left side trees
+        for (let z = 0; z > -100; z -= 8) {
+            for (let x = -35; x <= -8; x += 6 + Math.random() * 4) {
+                treePositions.push({
+                    x: x + (Math.random() - 0.5) * 4,
+                    z: z + (Math.random() - 0.5) * 6,
+                    scale: 0.8 + Math.random() * 0.6
+                });
+            }
+        }
+
+        // Right side trees
+        for (let z = 0; z > -100; z -= 8) {
+            for (let x = 8; x <= 35; x += 6 + Math.random() * 4) {
+                treePositions.push({
+                    x: x + (Math.random() - 0.5) * 4,
+                    z: z + (Math.random() - 0.5) * 6,
+                    scale: 0.8 + Math.random() * 0.6
+                });
+            }
+        }
+
+        // Create forest trees (darker green, taller)
+        const forestTrunkMaterial = new THREE.MeshStandardMaterial({
+            color: 0x3a2518,
+            roughness: 0.95
+        });
+        const forestLeafMaterial = new THREE.MeshStandardMaterial({
+            color: 0x1a4a1a,
+            roughness: 0.9
+        });
+
+        for (const pos of treePositions) {
+            const tree = this.createForestTree(pos.x, pos.z - 60, pos.scale, forestTrunkMaterial, forestLeafMaterial);
+            this.castle.add(tree);
+        }
+
+        // Add mysterious fog particles/atmosphere
+        this.createForestAtmosphere(forestGroup);
+
+        // Create the path with stone markers
+        this.createForestPath(forestGroup);
+
+        // Create the goal shrine at the end
+        this.createGoalShrine();
+
+        this.castle.add(forestGroup);
+
+        // Update bounds to include forest
+        this.bounds.minZ = -150;
+    }
+
+    createForestTree(x, z, scale, trunkMat, leafMat) {
+        const tree = new THREE.Group();
+        tree.position.set(x, 0, z);
+
+        // Taller trunk
+        const trunkHeight = 6 * scale;
+        const trunkGeometry = new THREE.CylinderGeometry(0.2 * scale, 0.4 * scale, trunkHeight, 8);
+        const trunk = new THREE.Mesh(trunkGeometry, trunkMat);
+        trunk.position.y = trunkHeight / 2;
+        trunk.castShadow = true;
+        tree.add(trunk);
+
+        // Conical foliage (pine tree style)
+        const foliageLevels = 3;
+        for (let i = 0; i < foliageLevels; i++) {
+            const levelY = trunkHeight * 0.5 + i * 1.5 * scale;
+            const levelSize = (2.5 - i * 0.5) * scale;
+            const coneGeometry = new THREE.ConeGeometry(levelSize, 2.5 * scale, 8);
+            const foliage = new THREE.Mesh(coneGeometry, leafMat);
+            foliage.position.y = levelY;
+            foliage.castShadow = true;
+            tree.add(foliage);
+        }
+
+        return tree;
+    }
+
+    createForestAtmosphere(parent) {
+        // Ground fog effect using transparent planes
+        const fogMaterial = new THREE.MeshStandardMaterial({
+            color: 0x88aa88,
+            transparent: true,
+            opacity: 0.15,
+            side: THREE.DoubleSide
+        });
+
+        for (let i = 0; i < 15; i++) {
+            const fogGeometry = new THREE.PlaneGeometry(20 + Math.random() * 20, 3);
+            const fog = new THREE.Mesh(fogGeometry, fogMaterial);
+            fog.position.set(
+                (Math.random() - 0.5) * 60,
+                0.5 + Math.random() * 1.5,
+                -30 - Math.random() * 80
+            );
+            fog.rotation.y = Math.random() * Math.PI;
+            parent.add(fog);
+        }
+
+        // Fireflies/glowing particles
+        const fireflyGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+        const fireflyMaterial = new THREE.MeshStandardMaterial({
+            color: 0xffff88,
+            emissive: 0xaaff44,
+            emissiveIntensity: 2
+        });
+
+        for (let i = 0; i < 30; i++) {
+            const firefly = new THREE.Mesh(fireflyGeometry, fireflyMaterial);
+            firefly.position.set(
+                (Math.random() - 0.5) * 70,
+                1 + Math.random() * 4,
+                -60 - Math.random() * 80
+            );
+            this.animatedObjects.push({
+                mesh: firefly,
+                type: 'firefly',
+                baseY: firefly.position.y,
+                phase: Math.random() * Math.PI * 2
+            });
+            this.castle.add(firefly);
+        }
+    }
+
+    createForestPath(parent) {
+        // Stone path markers leading through the forest
+        const pathMaterial = new THREE.MeshStandardMaterial({
+            color: 0x666666,
+            roughness: 0.9
+        });
+
+        // Winding path of stepping stones
+        const pathPoints = [
+            { x: 0, z: -5 },
+            { x: 2, z: -15 },
+            { x: -1, z: -25 },
+            { x: 3, z: -35 },
+            { x: 0, z: -45 },
+            { x: -2, z: -55 },
+            { x: 1, z: -65 },
+            { x: 0, z: -75 },
+            { x: -1, z: -85 },
+            { x: 0, z: -95 }
+        ];
+
+        for (const point of pathPoints) {
+            // Large stepping stone
+            const stoneGeometry = new THREE.CylinderGeometry(1.2, 1.5, 0.3, 8);
+            const stone = new THREE.Mesh(stoneGeometry, pathMaterial);
+            stone.position.set(point.x, 0.15, point.z - 60);
+            stone.receiveShadow = true;
+            parent.add(stone);
+
+            // Small surrounding stones
+            for (let i = 0; i < 3; i++) {
+                const smallStoneGeometry = new THREE.CylinderGeometry(0.3, 0.4, 0.15, 6);
+                const smallStone = new THREE.Mesh(smallStoneGeometry, pathMaterial);
+                const angle = (i / 3) * Math.PI * 2 + Math.random() * 0.5;
+                smallStone.position.set(
+                    point.x + Math.cos(angle) * 2,
+                    0.08,
+                    point.z - 60 + Math.sin(angle) * 2
+                );
+                parent.add(smallStone);
+            }
+        }
+
+        // Lanterns along the path
+        const lanternPositions = [
+            { x: -3, z: -20 },
+            { x: 4, z: -40 },
+            { x: -4, z: -60 },
+            { x: 3, z: -80 }
+        ];
+
+        for (const pos of lanternPositions) {
+            this.createGroundLantern(pos.x, pos.z - 60);
+        }
+    }
+
+    createGoalShrine() {
+        // The goal: a sacred shrine at the end of the forest path
+        const shrineGroup = new THREE.Group();
+        shrineGroup.position.set(0, 0, -160);
+
+        // Shrine platform
+        const platformGeometry = new THREE.CylinderGeometry(8, 10, 1, 8);
+        const platformMaterial = new THREE.MeshStandardMaterial({
+            color: 0x555555,
+            roughness: 0.8
+        });
+        const platform = new THREE.Mesh(platformGeometry, platformMaterial);
+        platform.position.y = 0.5;
+        platform.receiveShadow = true;
+        shrineGroup.add(platform);
+
+        // Physics for platform
+        this.physicsSystem.addStaticBody({
+            type: 'box',
+            position: new THREE.Vector3(0, 0.5, -160),
+            size: new THREE.Vector3(16, 1, 16)
+        });
+
+        // Torii gate at shrine entrance
+        this.createToriiGate(0, -155);
+
+        // Central shrine structure
+        const shrineBaseGeometry = new THREE.BoxGeometry(4, 0.5, 4);
+        const shrineBase = new THREE.Mesh(shrineBaseGeometry, this.stoneMaterial);
+        shrineBase.position.y = 1.25;
+        shrineGroup.add(shrineBase);
+
+        // Shrine building
+        const shrineBodyGeometry = new THREE.BoxGeometry(3, 3, 3);
+        const shrineBody = new THREE.Mesh(shrineBodyGeometry, this.woodMaterial);
+        shrineBody.position.y = 3;
+        shrineBody.castShadow = true;
+        shrineGroup.add(shrineBody);
+
+        // Shrine roof
+        const roofGeometry = new THREE.ConeGeometry(3, 2, 4);
+        const roof = new THREE.Mesh(roofGeometry, this.roofMaterial);
+        roof.position.y = 5.5;
+        roof.rotation.y = Math.PI / 4;
+        roof.castShadow = true;
+        shrineGroup.add(roof);
+
+        // Glowing artifact inside shrine (the goal!)
+        const artifactGeometry = new THREE.OctahedronGeometry(0.5);
+        const artifactMaterial = new THREE.MeshStandardMaterial({
+            color: 0x00ffff,
+            emissive: 0x00aaaa,
+            emissiveIntensity: 2,
+            metalness: 0.8,
+            roughness: 0.1
+        });
+        const artifact = new THREE.Mesh(artifactGeometry, artifactMaterial);
+        artifact.position.y = 2.5;
+        shrineGroup.add(artifact);
+
+        // Rotating animation for artifact
+        this.animatedObjects.push({
+            mesh: artifact,
+            type: 'artifact',
+            baseY: 2.5
+        });
+
+        // Artifact light
+        const artifactLight = new THREE.PointLight(0x00ffff, 2, 15);
+        artifactLight.position.y = 2.5;
+        shrineGroup.add(artifactLight);
+
+        // Stone lanterns at shrine corners
+        const lanternOffsets = [
+            { x: -5, z: 3 },
+            { x: 5, z: 3 },
+            { x: -5, z: -3 },
+            { x: 5, z: -3 }
+        ];
+
+        for (const offset of lanternOffsets) {
+            const lantern = this.createStoneLantern();
+            lantern.position.set(offset.x, 0, offset.z);
+            shrineGroup.add(lantern);
+        }
+
+        // Store goal position for game logic
+        this.goalPosition = new THREE.Vector3(0, 1, -160);
+
+        this.castle.add(shrineGroup);
+    }
+
+    createStoneLantern() {
+        const lantern = new THREE.Group();
+
+        // Base
+        const baseGeometry = new THREE.CylinderGeometry(0.4, 0.5, 0.3, 6);
+        const base = new THREE.Mesh(baseGeometry, this.stoneMaterial);
+        base.position.y = 0.15;
+        lantern.add(base);
+
+        // Pole
+        const poleGeometry = new THREE.CylinderGeometry(0.15, 0.2, 1.5, 6);
+        const pole = new THREE.Mesh(poleGeometry, this.stoneMaterial);
+        pole.position.y = 1.05;
+        lantern.add(pole);
+
+        // Lantern housing
+        const housingGeometry = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+        const housing = new THREE.Mesh(housingGeometry, this.stoneMaterial);
+        housing.position.y = 2;
+        lantern.add(housing);
+
+        // Light inside
+        const light = new THREE.PointLight(0xffaa44, 0.5, 8);
+        light.position.y = 2;
+        lantern.add(light);
+
+        // Roof
+        const roofGeometry = new THREE.ConeGeometry(0.5, 0.4, 4);
+        const roof = new THREE.Mesh(roofGeometry, this.stoneMaterial);
+        roof.position.y = 2.5;
+        roof.rotation.y = Math.PI / 4;
+        lantern.add(roof);
+
+        return lantern;
+    }
+
     addTorch(parent, x, y, z) {
         const group = new THREE.Group();
         group.position.set(x, y, z);
@@ -1173,10 +1513,19 @@ export class NinjaCastle {
             }
         }
 
-        // Animate water
+        // Animate objects
         for (const obj of this.animatedObjects) {
             if (obj.type === 'water') {
                 obj.mesh.position.y = 0.01 + Math.sin(elapsedTime * 2) * 0.02;
+            } else if (obj.type === 'firefly') {
+                // Fireflies bob and drift
+                obj.mesh.position.y = obj.baseY + Math.sin(elapsedTime * 2 + obj.phase) * 0.5;
+                obj.mesh.position.x += Math.sin(elapsedTime * 0.5 + obj.phase) * 0.01;
+                obj.mesh.position.z += Math.cos(elapsedTime * 0.3 + obj.phase) * 0.01;
+            } else if (obj.type === 'artifact') {
+                // Artifact rotates and bobs
+                obj.mesh.rotation.y = elapsedTime * 0.5;
+                obj.mesh.position.y = obj.baseY + Math.sin(elapsedTime * 1.5) * 0.2;
             }
         }
 

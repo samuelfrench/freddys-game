@@ -48,10 +48,12 @@ export class Game {
         this.player = null;
         this.castle = null;
         this.enemies = [];
+        this.tombstones = [];
 
         // Game state
         this.score = 0;
         this.wave = 1;
+        this.hasWon = false;
     }
 
     async init() {
@@ -207,8 +209,8 @@ export class Game {
         // Start ambient music
         this.audioSystem.playAmbient();
 
-        // Start first wave
-        this.waveSystem.startWave(1);
+        // Show objective
+        this.uiManager.showNotification('Reach the shrine in the forest!');
 
         // Begin game loop
         this.gameLoop();
@@ -258,11 +260,11 @@ export class Game {
         // Update particles
         this.particleSystem.update(this.deltaTime);
 
-        // Update wave system
-        this.waveSystem.update(this.deltaTime);
-        if (this.waveSystem.isWaveComplete()) {
-            this.nextWave();
-        }
+        // Check for goal (reaching the shrine)
+        this.checkGoal();
+
+        // Spawn enemies along the path instead of waves
+        this.spawnPathEnemies();
 
         // Update UI
         this.uiManager.update();
@@ -274,12 +276,65 @@ export class Game {
         this.castle.update(this.deltaTime, this.elapsedTime, this.camera);
     }
 
+    checkGoal() {
+        if (this.hasWon) return;
+
+        // Check if player reached the shrine (goal position)
+        const goalPos = this.castle.goalPosition;
+        if (goalPos) {
+            const distance = this.player.position.distanceTo(goalPos);
+            if (distance < 5) {
+                this.victory();
+            }
+        }
+    }
+
+    spawnPathEnemies() {
+        // Spawn enemies based on player position (along the path to goal)
+        // Instead of waves, enemies appear as you progress
+        const playerZ = this.player.position.z;
+        const activeEnemies = this.aiSystem.getEnemies().length;
+
+        // Only spawn if few enemies and player is progressing
+        if (activeEnemies < 3 && playerZ < -40) {
+            // Spawn enemies ahead of player in the forest
+            const spawnZ = playerZ - 15 - Math.random() * 10;
+            if (spawnZ > -150) { // Don't spawn past the shrine
+                const spawnX = (Math.random() - 0.5) * 20;
+                const spawnPos = new THREE.Vector3(spawnX, 0, spawnZ);
+
+                // Random enemy type based on depth
+                let type = 'grunt';
+                if (playerZ < -80) {
+                    type = Math.random() < 0.3 ? 'warrior' : 'grunt';
+                }
+                if (playerZ < -120) {
+                    type = Math.random() < 0.2 ? 'assassin' : (Math.random() < 0.4 ? 'warrior' : 'grunt');
+                }
+
+                this.aiSystem.spawnEnemy(type, spawnPos);
+            }
+        }
+    }
+
+    victory() {
+        this.hasWon = true;
+        this.uiManager.showNotification('VICTORY! You reached the shrine!');
+        this.audioSystem.playSound('victory');
+
+        // Celebration pause
+        setTimeout(() => {
+            this.uiManager.showNotification(`Final Score: ${this.score}`);
+        }, 2000);
+    }
+
     handleCombatResults(results) {
         // Handle enemy deaths
         for (const death of results.enemyDeaths) {
             this.score += death.points;
             this.particleSystem.createDeathEffect(death.position);
             this.audioSystem.playSound('enemyDeath', death.position);
+            this.createTombstone(death.position, death.enemy.type);
         }
 
         // Handle player damage
@@ -299,11 +354,82 @@ export class Game {
         }
     }
 
-    nextWave() {
-        this.wave++;
-        this.waveSystem.startWave(this.wave);
-        this.uiManager.showNotification(`Wave ${this.wave}`);
-        this.audioSystem.playSound('waveStart');
+    createTombstone(position, enemyType) {
+        const tombstone = new THREE.Group();
+        tombstone.position.copy(position);
+        tombstone.position.y = 0;
+
+        // Stone material
+        const stoneMaterial = new THREE.MeshStandardMaterial({
+            color: 0x555566,
+            roughness: 0.9
+        });
+
+        // Base
+        const baseGeometry = new THREE.BoxGeometry(0.6, 0.15, 0.4);
+        const base = new THREE.Mesh(baseGeometry, stoneMaterial);
+        base.position.y = 0.075;
+        tombstone.add(base);
+
+        // Tombstone shape varies by enemy type
+        let stoneHeight = 0.8;
+        if (enemyType === 'boss') {
+            stoneHeight = 1.5;
+        } else if (enemyType === 'warrior') {
+            stoneHeight = 1.0;
+        } else if (enemyType === 'assassin') {
+            stoneHeight = 0.7;
+        }
+
+        // Main stone
+        const stoneGeometry = new THREE.BoxGeometry(0.5, stoneHeight, 0.15);
+        const stone = new THREE.Mesh(stoneGeometry, stoneMaterial);
+        stone.position.y = 0.15 + stoneHeight / 2;
+        tombstone.add(stone);
+
+        // Rounded top
+        const topGeometry = new THREE.SphereGeometry(0.25, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+        const top = new THREE.Mesh(topGeometry, stoneMaterial);
+        top.position.y = 0.15 + stoneHeight;
+        top.scale.z = 0.3;
+        tombstone.add(top);
+
+        // Small cross or symbol for bosses
+        if (enemyType === 'boss') {
+            const crossMaterial = new THREE.MeshStandardMaterial({
+                color: 0x333344,
+                roughness: 0.8
+            });
+            const vertGeometry = new THREE.BoxGeometry(0.08, 0.4, 0.05);
+            const vert = new THREE.Mesh(vertGeometry, crossMaterial);
+            vert.position.y = stoneHeight + 0.4;
+            tombstone.add(vert);
+
+            const horizGeometry = new THREE.BoxGeometry(0.25, 0.08, 0.05);
+            const horiz = new THREE.Mesh(horizGeometry, crossMaterial);
+            horiz.position.y = stoneHeight + 0.3;
+            tombstone.add(horiz);
+        }
+
+        // Random slight rotation for variety
+        tombstone.rotation.y = (Math.random() - 0.5) * 0.3;
+
+        // Add shadow
+        tombstone.traverse((child) => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
+
+        this.scene.add(tombstone);
+        this.tombstones.push(tombstone);
+
+        // Limit tombstones to prevent performance issues
+        if (this.tombstones.length > 50) {
+            const oldTombstone = this.tombstones.shift();
+            this.scene.remove(oldTombstone);
+        }
     }
 
     pause() {
@@ -321,7 +447,7 @@ export class Game {
     restart() {
         // Reset game state
         this.score = 0;
-        this.wave = 1;
+        this.hasWon = false;
 
         // Reset player
         this.player.reset();
@@ -329,8 +455,14 @@ export class Game {
         // Clear enemies
         this.aiSystem.clearAllEnemies();
 
-        // Start fresh
-        this.waveSystem.startWave(1);
+        // Clear tombstones
+        for (const tombstone of this.tombstones) {
+            this.scene.remove(tombstone);
+        }
+        this.tombstones = [];
+
+        // Show objective again
+        this.uiManager.showNotification('Reach the shrine in the forest!');
 
         // Resume
         this.resume();
