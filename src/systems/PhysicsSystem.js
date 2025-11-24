@@ -113,6 +113,17 @@ export class PhysicsSystem {
         const boxMin = box.position.clone().sub(halfSize);
         const boxMax = box.position.clone().add(halfSize);
 
+        // Check if this is a step-able surface (player can walk onto it)
+        // If so, don't trigger wall collision - let the ground system handle it
+        const maxStepHeight = 1.0;
+        const feetY = capsulePos.y - height;
+        const boxTopY = boxMax.y;
+
+        if (boxTopY <= feetY + maxStepHeight) {
+            // This is a walkable platform, don't block with wall collision
+            return { collided: false, pushback: new THREE.Vector3() };
+        }
+
         // Find closest point on box to capsule center
         const closest = new THREE.Vector3(
             Math.max(boxMin.x, Math.min(capsulePos.x, boxMax.x)),

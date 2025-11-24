@@ -9,6 +9,9 @@ import { Game } from './core/Game.js';
 document.addEventListener('DOMContentLoaded', async () => {
     const game = new Game();
 
+    // Expose game instance for E2E testing
+    window.__GAME__ = game;
+
     try {
         await game.init();
         game.start();

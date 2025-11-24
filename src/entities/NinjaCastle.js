@@ -280,12 +280,45 @@ export class NinjaCastle {
         // Top decorative roof
         this.createPagodaRoof(group, currentSize, currentY, isMain);
 
-        // Add gold ornaments on main tower
+        // Add decorative spire on main tower (traditional Japanese castle finial)
         if (isMain) {
-            const ornamentGeometry = new THREE.OctahedronGeometry(0.5);
-            const ornament = new THREE.Mesh(ornamentGeometry, this.goldMaterial);
-            ornament.position.y = currentY + 4;
-            group.add(ornament);
+            const spireGroup = new THREE.Group();
+            spireGroup.position.y = currentY + 2.5;
+
+            // Spire pole
+            const poleGeometry = new THREE.CylinderGeometry(0.08, 0.12, 3, 8);
+            const pole = new THREE.Mesh(poleGeometry, this.goldMaterial);
+            pole.position.y = 1.5;
+            spireGroup.add(pole);
+
+            // Decorative rings on the spire
+            for (let i = 0; i < 4; i++) {
+                const ringGeometry = new THREE.TorusGeometry(0.2 - i * 0.03, 0.05, 8, 16);
+                const ring = new THREE.Mesh(ringGeometry, this.goldMaterial);
+                ring.rotation.x = Math.PI / 2;
+                ring.position.y = 0.5 + i * 0.5;
+                spireGroup.add(ring);
+            }
+
+            // Top ornament - glowing orb
+            const orbGeometry = new THREE.SphereGeometry(0.25, 16, 16);
+            const orbMaterial = new THREE.MeshStandardMaterial({
+                color: 0xffd700,
+                emissive: 0xffaa00,
+                emissiveIntensity: 0.8,
+                metalness: 0.9,
+                roughness: 0.1
+            });
+            const orb = new THREE.Mesh(orbGeometry, orbMaterial);
+            orb.position.y = 3.2;
+            spireGroup.add(orb);
+
+            // Light at the top to make it visible
+            const topLight = new THREE.PointLight(0xffdd88, 0.5, 10);
+            topLight.position.y = 3.2;
+            spireGroup.add(topLight);
+
+            group.add(spireGroup);
         }
 
         this.castle.add(group);
@@ -1007,7 +1040,7 @@ export class NinjaCastle {
         const hemiLight = new THREE.HemisphereLight(0x9090d0, 0x606060, 2.0);
         this.scene.add(hemiLight);
 
-        // Add scattered torches around the courtyard
+        // Add scattered torches around the courtyard with posts
         const torchPositions = [
             [-10, 2.5, 20], [10, 2.5, 20],
             [-10, 2.5, -20], [10, 2.5, -20],
@@ -1018,8 +1051,17 @@ export class NinjaCastle {
 
         for (const [x, y, z] of torchPositions) {
             const torchGroup = new THREE.Group();
-            torchGroup.position.set(x, y, z);
-            this.addTorch(torchGroup, 0, 0, 0);
+            torchGroup.position.set(x, 0, z);
+
+            // Add wooden post from ground up to torch height
+            const postGeometry = new THREE.CylinderGeometry(0.08, 0.1, y, 8);
+            const post = new THREE.Mesh(postGeometry, this.darkWoodMaterial);
+            post.position.y = y / 2;
+            post.castShadow = true;
+            torchGroup.add(post);
+
+            // Add torch at top of post
+            this.addTorch(torchGroup, 0, y, 0);
             this.castle.add(torchGroup);
         }
     }
