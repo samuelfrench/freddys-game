@@ -113,60 +113,60 @@ class Enemy {
     setupStats() {
         switch (this.type) {
             case 'grunt':
-                this.maxHealth = 50;
-                this.health = 50;
-                this.speed = 4;
-                this.attackDamage = 10;
+                this.maxHealth = 25;
+                this.health = 25;
+                this.speed = 3;
+                this.attackDamage = 5;
                 this.attackRange = 2;
-                this.attackSpeed = 1;
+                this.attackSpeed = 0.7;
                 this.detectionRange = 15;
                 this.color = 0x444444;
                 this.points = 100;
                 break;
 
             case 'warrior':
-                this.maxHealth = 100;
-                this.health = 100;
-                this.speed = 3;
-                this.attackDamage = 20;
+                this.maxHealth = 50;
+                this.health = 50;
+                this.speed = 2.5;
+                this.attackDamage = 8;
                 this.attackRange = 2.5;
-                this.attackSpeed = 0.8;
+                this.attackSpeed = 0.6;
                 this.detectionRange = 18;
                 this.color = 0x660000;
                 this.points = 200;
                 break;
 
             case 'assassin':
-                this.maxHealth = 40;
-                this.health = 40;
-                this.speed = 7;
-                this.attackDamage = 30;
+                this.maxHealth = 20;
+                this.health = 20;
+                this.speed = 5;
+                this.attackDamage = 12;
                 this.attackRange = 2;
-                this.attackSpeed = 1.5;
+                this.attackSpeed = 1.0;
                 this.detectionRange = 25;
                 this.color = 0x220044;
                 this.points = 300;
                 break;
 
             case 'boss':
-                this.maxHealth = 500;
-                this.health = 500;
-                this.speed = 3;
-                this.attackDamage = 40;
+                this.maxHealth = 150;
+                this.health = 150;
+                this.speed = 2.5;
+                this.attackDamage = 15;
                 this.attackRange = 4;
-                this.attackSpeed = 0.5;
+                this.attackSpeed = 0.4;
                 this.detectionRange = 30;
                 this.color = 0x990000;
                 this.points = 1000;
                 break;
 
             default:
-                this.maxHealth = 50;
-                this.health = 50;
-                this.speed = 4;
-                this.attackDamage = 10;
+                this.maxHealth = 25;
+                this.health = 25;
+                this.speed = 3;
+                this.attackDamage = 5;
                 this.attackRange = 2;
-                this.attackSpeed = 1;
+                this.attackSpeed = 0.7;
                 this.detectionRange = 15;
                 this.color = 0x444444;
                 this.points = 100;

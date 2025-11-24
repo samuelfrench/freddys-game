@@ -30,15 +30,15 @@ export class Player {
         this.isAttacking = false;
 
         // Stats
-        this.maxHealth = 100;
-        this.health = 100;
+        this.maxHealth = 200;
+        this.health = 200;
         this.maxStamina = 100;
         this.stamina = 100;
-        this.staminaRegen = 15;
-        this.staminaDrain = 20;
+        this.staminaRegen = 30;
+        this.staminaDrain = 15;
 
         // Combat
-        this.attackDamage = 25;
+        this.attackDamage = 40;
         this.attackRange = 3;
         this.attackCooldown = 0;
         this.attackDuration = 0.3;
@@ -47,10 +47,10 @@ export class Player {
 
         // Abilities
         this.abilities = {
-            slash: { cooldown: 0, maxCooldown: 1, damage: 35, staminaCost: 15 },
-            spin: { cooldown: 0, maxCooldown: 5, damage: 50, staminaCost: 30 },
-            dash: { cooldown: 0, maxCooldown: 3, distance: 10, staminaCost: 20 },
-            fireBlast: { cooldown: 0, maxCooldown: 8, damage: 80, staminaCost: 40 }
+            slash: { cooldown: 0, maxCooldown: 1, damage: 60, staminaCost: 10 },
+            spin: { cooldown: 0, maxCooldown: 4, damage: 80, staminaCost: 20 },
+            dash: { cooldown: 0, maxCooldown: 2, distance: 10, staminaCost: 15 },
+            fireBlast: { cooldown: 0, maxCooldown: 6, damage: 120, staminaCost: 30 }
         };
 
         // Camera settings
@@ -61,6 +61,12 @@ export class Player {
         // Visual elements
         this.weaponModel = null;
         this.weaponSwingAnimation = null;
+
+        // Animation state
+        this.currentAnimation = 'idle';
+        this.animationTime = 0;
+        this.animationDuration = 0;
+        this.activeAbility = null;
 
         // Head bobbing
         this.bobTimer = 0;
@@ -91,69 +97,83 @@ export class Player {
     createWeaponModel() {
         const weaponGroup = new THREE.Group();
 
-        // Katana blade
-        const bladeGeometry = new THREE.BoxGeometry(0.03, 0.8, 0.01);
+        // Katana blade - larger and more visible
+        const bladeGeometry = new THREE.BoxGeometry(0.04, 1.1, 0.015);
         const bladeMaterial = new THREE.MeshStandardMaterial({
-            color: 0xdddddd,
+            color: 0xeeeeee,
             metalness: 0.95,
-            roughness: 0.1,
-            envMapIntensity: 1.5
+            roughness: 0.05,
+            emissive: 0x222222,
+            emissiveIntensity: 0.3
         });
         const blade = new THREE.Mesh(bladeGeometry, bladeMaterial);
-        blade.position.y = 0.45;
+        blade.position.y = 0.6;
         weaponGroup.add(blade);
 
-        // Blade edge (sharper look)
-        const edgeGeometry = new THREE.BoxGeometry(0.035, 0.8, 0.002);
+        // Blade edge (sharper look with glow)
+        const edgeGeometry = new THREE.BoxGeometry(0.045, 1.1, 0.003);
         const edgeMaterial = new THREE.MeshStandardMaterial({
             color: 0xffffff,
             metalness: 1,
             roughness: 0,
-            emissive: 0x444444
+            emissive: 0x6666ff,
+            emissiveIntensity: 0.5
         });
         const edge = new THREE.Mesh(edgeGeometry, edgeMaterial);
-        edge.position.set(0, 0.45, 0.006);
+        edge.position.set(0, 0.6, 0.009);
         weaponGroup.add(edge);
 
-        // Handle (tsuka)
-        const handleGeometry = new THREE.CylinderGeometry(0.025, 0.025, 0.25, 8);
+        // Handle (tsuka) - longer grip
+        const handleGeometry = new THREE.CylinderGeometry(0.035, 0.03, 0.35, 8);
         const handleMaterial = new THREE.MeshStandardMaterial({
             color: 0x1a1a1a,
             roughness: 0.9
         });
         const handle = new THREE.Mesh(handleGeometry, handleMaterial);
         handle.rotation.x = Math.PI / 2;
-        handle.position.y = -0.05;
+        handle.position.y = -0.12;
         weaponGroup.add(handle);
 
-        // Handle wrap
+        // Handle wrap - red silk
         const wrapMaterial = new THREE.MeshStandardMaterial({
-            color: 0x800000,
-            roughness: 0.8
+            color: 0xaa0000,
+            roughness: 0.7,
+            emissive: 0x330000,
+            emissiveIntensity: 0.2
         });
-        for (let i = 0; i < 5; i++) {
-            const wrapGeometry = new THREE.TorusGeometry(0.028, 0.005, 4, 8);
+        for (let i = 0; i < 7; i++) {
+            const wrapGeometry = new THREE.TorusGeometry(0.038, 0.008, 4, 8);
             const wrap = new THREE.Mesh(wrapGeometry, wrapMaterial);
             wrap.rotation.y = Math.PI / 2;
-            wrap.position.y = -0.15 + i * 0.05;
+            wrap.position.y = -0.25 + i * 0.045;
             weaponGroup.add(wrap);
         }
 
-        // Guard (tsuba)
-        const guardGeometry = new THREE.CylinderGeometry(0.06, 0.06, 0.015, 16);
+        // Guard (tsuba) - ornate
+        const guardGeometry = new THREE.CylinderGeometry(0.08, 0.08, 0.02, 16);
         const guardMaterial = new THREE.MeshStandardMaterial({
-            color: 0x333333,
-            metalness: 0.8,
-            roughness: 0.3
+            color: 0xffd700,
+            metalness: 0.9,
+            roughness: 0.2
         });
         const guard = new THREE.Mesh(guardGeometry, guardMaterial);
         guard.rotation.x = Math.PI / 2;
         guard.position.y = 0.05;
         weaponGroup.add(guard);
 
-        // Position weapon in view
-        weaponGroup.position.set(0.3, -0.3, -0.5);
-        weaponGroup.rotation.set(0, -0.2, 0.3);
+        // Pommel cap
+        const pommelGeometry = new THREE.SphereGeometry(0.04, 8, 8);
+        const pommel = new THREE.Mesh(pommelGeometry, guardMaterial);
+        pommel.position.y = -0.32;
+        weaponGroup.add(pommel);
+
+        // Default idle position - more prominent in view
+        weaponGroup.position.set(0.35, -0.35, -0.6);
+        weaponGroup.rotation.set(-0.3, -0.4, 0.4);
+
+        // Store default position for animations
+        this.weaponDefaultPos = new THREE.Vector3(0.35, -0.35, -0.6);
+        this.weaponDefaultRot = new THREE.Euler(-0.3, -0.4, 0.4);
 
         this.weaponModel = weaponGroup;
         this.camera.add(weaponGroup);
@@ -181,11 +201,15 @@ export class Player {
             this.isBlocking = false;
         });
 
-        // Abilities
-        this.inputManager.onKeyDown('1', () => this.useAbility('slash'));
-        this.inputManager.onKeyDown('2', () => this.useAbility('spin'));
-        this.inputManager.onKeyDown('3', () => this.useAbility('dash'));
-        this.inputManager.onKeyDown('4', () => this.useAbility('fireBlast'));
+        // Abilities with keybinds shown in README (Q, E, Shift+Space, R)
+        this.inputManager.onKeyDown('KeyQ', () => this.useAbility('slash'));
+        this.inputManager.onKeyDown('KeyE', () => this.useAbility('spin'));
+        this.inputManager.onKeyDown('KeyR', () => this.useAbility('fireBlast'));
+        // Also keep number keys
+        this.inputManager.onKeyDown('Digit1', () => this.useAbility('slash'));
+        this.inputManager.onKeyDown('Digit2', () => this.useAbility('spin'));
+        this.inputManager.onKeyDown('Digit3', () => this.useAbility('dash'));
+        this.inputManager.onKeyDown('Digit4', () => this.useAbility('fireBlast'));
     }
 
     update(deltaTime) {
@@ -306,25 +330,150 @@ export class Player {
     updateWeaponAnimation(deltaTime) {
         if (!this.weaponModel) return;
 
+        // Update animation timer
+        if (this.animationTime > 0) {
+            this.animationTime -= deltaTime;
+            if (this.animationTime <= 0) {
+                this.currentAnimation = 'idle';
+                this.activeAbility = null;
+            }
+        }
+
         // Idle sway
-        const swayX = Math.sin(Date.now() * 0.001) * 0.01;
-        const swayY = Math.cos(Date.now() * 0.0015) * 0.01;
+        const time = Date.now() * 0.001;
+        const swayX = Math.sin(time) * 0.015;
+        const swayY = Math.cos(time * 1.5) * 0.01;
 
-        if (this.isAttacking && this.attackCooldown > 0) {
-            // Attack animation
-            const attackProgress = 1 - (this.attackCooldown / this.attackDuration);
-            const swingAngle = Math.sin(attackProgress * Math.PI) * 1.5;
+        // Get animation progress (0 to 1)
+        const progress = this.animationDuration > 0
+            ? 1 - (this.animationTime / this.animationDuration)
+            : 0;
 
-            this.weaponModel.rotation.x = swingAngle;
-            this.weaponModel.position.z = -0.5 - attackProgress * 0.3;
+        if (this.currentAnimation === 'attack') {
+            // Basic attack - horizontal slash with combo variations
+            const comboOffset = (this.comboCount - 1) * 0.3;
+            const swingPhase = Math.sin(progress * Math.PI);
+
+            // Alternate swing direction based on combo
+            const direction = this.comboCount % 2 === 1 ? 1 : -1;
+
+            this.weaponModel.position.set(
+                0.35 + swingPhase * 0.2 * direction,
+                -0.35 + swingPhase * 0.15,
+                -0.6 - swingPhase * 0.25
+            );
+            this.weaponModel.rotation.set(
+                -0.3 + swingPhase * 1.2,
+                -0.4 + swingPhase * direction * 1.5,
+                0.4 - swingPhase * direction * 0.8
+            );
+        } else if (this.currentAnimation === 'slash') {
+            // Slash ability - powerful diagonal cut
+            const windUp = progress < 0.3 ? progress / 0.3 : 1;
+            const strike = progress >= 0.3 ? (progress - 0.3) / 0.7 : 0;
+
+            if (progress < 0.3) {
+                // Wind up - pull back
+                this.weaponModel.position.set(
+                    0.5 + windUp * 0.2,
+                    -0.2 + windUp * 0.3,
+                    -0.5 + windUp * 0.1
+                );
+                this.weaponModel.rotation.set(
+                    -0.5 - windUp * 0.8,
+                    -0.8 - windUp * 0.5,
+                    0.6 + windUp * 0.3
+                );
+            } else {
+                // Strike down
+                const strikeEase = Math.sin(strike * Math.PI * 0.5);
+                this.weaponModel.position.set(
+                    0.7 - strikeEase * 0.5,
+                    0.1 - strikeEase * 0.6,
+                    -0.4 - strikeEase * 0.4
+                );
+                this.weaponModel.rotation.set(
+                    -1.3 + strikeEase * 2.0,
+                    -1.3 + strikeEase * 1.2,
+                    0.9 - strikeEase * 1.2
+                );
+            }
+        } else if (this.currentAnimation === 'spin') {
+            // Spin ability - 360 degree rotation
+            const spinAngle = progress * Math.PI * 2;
+            const bobHeight = Math.sin(progress * Math.PI) * 0.1;
+
+            this.weaponModel.position.set(
+                0.35 + Math.cos(spinAngle) * 0.3,
+                -0.35 + bobHeight,
+                -0.6 + Math.sin(spinAngle) * 0.3
+            );
+            this.weaponModel.rotation.set(
+                -0.3,
+                -0.4 + spinAngle,
+                0.4 + Math.sin(spinAngle * 2) * 0.3
+            );
+        } else if (this.currentAnimation === 'fireBlast') {
+            // Fire blast - thrust forward
+            const thrust = Math.sin(progress * Math.PI);
+            const charge = progress < 0.4 ? progress / 0.4 : 1;
+
+            if (progress < 0.4) {
+                // Charge up - pull back and glow
+                this.weaponModel.position.set(
+                    0.35 + charge * 0.1,
+                    -0.35 + charge * 0.2,
+                    -0.6 + charge * 0.2
+                );
+                this.weaponModel.rotation.set(
+                    -0.3 - charge * 0.5,
+                    -0.4,
+                    0.4
+                );
+            } else {
+                // Thrust forward
+                const thrustProgress = (progress - 0.4) / 0.6;
+                const thrustEase = Math.sin(thrustProgress * Math.PI * 0.5);
+                this.weaponModel.position.set(
+                    0.45 - thrustEase * 0.3,
+                    -0.15 - thrustEase * 0.1,
+                    -0.4 - thrustEase * 0.5
+                );
+                this.weaponModel.rotation.set(
+                    -0.8 + thrustEase * 0.6,
+                    -0.4,
+                    0.4 - thrustEase * 0.2
+                );
+            }
+        } else if (this.currentAnimation === 'dash') {
+            // Dash - quick motion blur effect
+            const dashPhase = Math.sin(progress * Math.PI);
+            this.weaponModel.position.set(
+                0.35 - dashPhase * 0.2,
+                -0.35 - dashPhase * 0.1,
+                -0.6 - dashPhase * 0.3
+            );
+            this.weaponModel.rotation.set(
+                -0.3 + dashPhase * 0.5,
+                -0.4 - dashPhase * 0.3,
+                0.4
+            );
         } else if (this.isBlocking) {
-            // Block stance
-            this.weaponModel.rotation.set(0.5, 0.5, -0.5);
-            this.weaponModel.position.set(0.1, -0.1, -0.4);
+            // Block stance - sword held horizontally in front
+            this.weaponModel.position.set(0.1, -0.15, -0.45);
+            this.weaponModel.rotation.set(0.3, 0.8, -0.7);
         } else {
-            // Default idle position
-            this.weaponModel.position.set(0.3 + swayX, -0.3 + swayY, -0.5);
-            this.weaponModel.rotation.set(0, -0.2, 0.3);
+            // Default idle position with subtle sway
+            this.weaponModel.position.set(
+                this.weaponDefaultPos.x + swayX,
+                this.weaponDefaultPos.y + swayY,
+                this.weaponDefaultPos.z
+            );
+            this.weaponModel.rotation.set(
+                this.weaponDefaultRot.x + swayY * 0.5,
+                this.weaponDefaultRot.y + swayX * 0.5,
+                this.weaponDefaultRot.z
+            );
         }
     }
 
@@ -360,6 +509,11 @@ export class Player {
         this.isAttacking = true;
         this.attackCooldown = this.attackDuration;
 
+        // Trigger attack animation
+        this.currentAnimation = 'attack';
+        this.animationTime = this.attackDuration;
+        this.animationDuration = this.attackDuration;
+
         // Calculate damage based on combo
         const comboDamage = this.attackDamage * (1 + this.comboCount * 0.2);
 
@@ -383,6 +537,20 @@ export class Player {
         ability.cooldown = ability.maxCooldown;
 
         const direction = this.getForwardDirection();
+
+        // Animation durations for each ability
+        const animationDurations = {
+            slash: 0.5,
+            spin: 0.8,
+            dash: 0.3,
+            fireBlast: 0.7
+        };
+
+        // Trigger ability animation
+        this.currentAnimation = abilityName;
+        this.animationTime = animationDurations[abilityName] || 0.5;
+        this.animationDuration = this.animationTime;
+        this.activeAbility = abilityName;
 
         switch (abilityName) {
             case 'slash':

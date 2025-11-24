@@ -845,11 +845,11 @@ export class NinjaCastle {
 
     createLighting() {
         // Ambient light (moonlight)
-        const ambientLight = new THREE.AmbientLight(0x404060, 0.3);
+        const ambientLight = new THREE.AmbientLight(0xaaaadd, 2.0);
         this.scene.add(ambientLight);
 
         // Main directional light (moon)
-        const moonLight = new THREE.DirectionalLight(0x8888ff, 0.5);
+        const moonLight = new THREE.DirectionalLight(0xffffff, 3.0);
         moonLight.position.set(50, 100, 50);
         moonLight.castShadow = true;
         moonLight.shadow.mapSize.width = 2048;
@@ -864,7 +864,7 @@ export class NinjaCastle {
         this.scene.add(moonLight);
 
         // Hemisphere light for sky/ground color variation
-        const hemiLight = new THREE.HemisphereLight(0x303050, 0x202020, 0.4);
+        const hemiLight = new THREE.HemisphereLight(0x9090d0, 0x606060, 2.0);
         this.scene.add(hemiLight);
 
         // Add scattered torches around the courtyard

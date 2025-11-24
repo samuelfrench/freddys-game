@@ -59,8 +59,8 @@ export class Game {
 
         // Create Three.js scene
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x0a0a15);
-        this.scene.fog = new THREE.FogExp2(0x0a0a15, 0.015);
+        this.scene.background = new THREE.Color(0x4a4a6a);
+        this.scene.fog = new THREE.FogExp2(0x4a4a6a, 0.003);
 
         // Create camera
         this.camera = new THREE.PerspectiveCamera(
@@ -69,6 +69,9 @@ export class Game {
             0.1,
             1000
         );
+
+        // Add camera to scene so weapon is visible
+        this.scene.add(this.camera);
 
         this.updateLoadingProgress(15, 'Initializing renderer...');
 

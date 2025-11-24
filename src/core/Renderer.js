@@ -46,7 +46,7 @@ export class Renderer {
 
         // Tone mapping for HDR-like effects
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.2;
+        this.renderer.toneMappingExposure = 4.0;
 
         // Output encoding
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -94,7 +94,7 @@ export class Renderer {
                 uTime: { value: 0 },
                 uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
                 uBloomStrength: { value: settings.bloomEnabled ? 0.3 : 0.0 },
-                uVignetteStrength: { value: settings.vignetteEnabled ? 0.4 : 0.0 },
+                uVignetteStrength: { value: settings.vignetteEnabled ? 0.1 : 0.0 },
                 uChromaticAberration: { value: settings.chromaticAberration ? 0.002 : 0.0 },
                 uFilmGrain: { value: settings.filmGrain ? 0.03 : 0.0 }
             },
@@ -206,7 +206,7 @@ export class Renderer {
         if (this.postProcessQuad && this.postProcessQuad.material) {
             const uniforms = this.postProcessQuad.material.uniforms;
             uniforms.uBloomStrength.value = settings.bloomEnabled ? 0.3 : 0.0;
-            uniforms.uVignetteStrength.value = settings.vignetteEnabled ? 0.4 : 0.0;
+            uniforms.uVignetteStrength.value = settings.vignetteEnabled ? 0.1 : 0.0;
             uniforms.uChromaticAberration.value = settings.chromaticAberration ? 0.002 : 0.0;
             uniforms.uFilmGrain.value = settings.filmGrain ? 0.03 : 0.0;
         }
