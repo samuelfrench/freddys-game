@@ -562,10 +562,15 @@ export class NinjaCastle {
         const wallHeight = 5;
         const wallThickness = 1;
 
-        // North wall
-        this.createWall(-40, -40, 80, wallThickness, wallHeight, 0);
-        // South wall
-        this.createWall(-40, 40, 80, wallThickness, wallHeight, 0);
+        // North wall - split to create gate to forest
+        this.createWall(-40, -40, 32, wallThickness, wallHeight, 0); // Left section
+        this.createWall(8, -40, 32, wallThickness, wallHeight, 0);   // Right section
+        // Gate opening is from x=-8 to x=8 (16 unit wide opening)
+
+        // South wall - gate opening for entry
+        this.createWall(-40, 40, 32, wallThickness, wallHeight, 0);  // Left section
+        this.createWall(8, 40, 32, wallThickness, wallHeight, 0);    // Right section
+
         // East wall
         this.createWall(40, -40, wallThickness, 80, wallHeight, 0);
         // West wall
