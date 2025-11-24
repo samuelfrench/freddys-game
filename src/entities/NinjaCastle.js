@@ -244,6 +244,9 @@ export class NinjaCastle {
         let currentY = 2;
         let currentSize = baseSize;
 
+        // Add spiral stairs to climb the tower
+        this.createSpiralStairs(group, x, z, baseSize, levels, isMain);
+
         for (let i = 0; i < levels; i++) {
             // Wall section
             const wallHeight = isMain ? 3 : 3.5;
@@ -264,8 +267,11 @@ export class NinjaCastle {
             // Add windows
             this.addWindows(group, currentSize, currentY + wallHeight / 2);
 
-            // Roof/balcony
+            // Roof/balcony platform
             this.createRoof(group, currentSize + 1, currentY + wallHeight);
+
+            // Add walkable platform at each level
+            this.createTowerPlatform(group, x, z, currentSize + 0.5, currentY + wallHeight);
 
             currentY += wallHeight + 1;
             currentSize -= 0.5;
@@ -283,6 +289,101 @@ export class NinjaCastle {
         }
 
         this.castle.add(group);
+    }
+
+    createSpiralStairs(parent, towerX, towerZ, baseSize, levels, isMain) {
+        const wallHeight = isMain ? 3 : 3.5;
+        const totalHeight = (wallHeight + 1) * levels;
+        const stepsPerLevel = 32;
+        const totalSteps = stepsPerLevel * levels;
+        const radius = baseSize / 2 + 1.5;
+
+        // Create entry ramp from ground level (y=0) up to the spiral stairs start (y=2)
+        // Use fewer, longer steps that are spaced further apart
+        const entrySteps = 3;
+        const entryAngle = 0; // Start angle for spiral stairs
+        for (let i = 0; i < entrySteps; i++) {
+            const stepY = (i + 1) * 0.65; // ~0.65 units per step
+            const stepX = Math.cos(entryAngle) * (radius + 3 - i * 1.2);
+            const stepZ = Math.sin(entryAngle) * (radius + 3 - i * 1.2);
+
+            // Visual step - wide platform-like steps
+            const stepGeometry = new THREE.BoxGeometry(5.0, 0.25, 3.0);
+            const step = new THREE.Mesh(stepGeometry, this.woodMaterial);
+            step.position.set(stepX, stepY, stepZ);
+            step.rotation.y = entryAngle + Math.PI / 2;
+            step.castShadow = true;
+            step.receiveShadow = true;
+            parent.add(step);
+
+            // Collision for entry step - wide platforms
+            this.physicsSystem.addStaticBody({
+                type: 'box',
+                position: new THREE.Vector3(towerX + stepX, stepY, towerZ + stepZ),
+                size: new THREE.Vector3(6.0, 0.3, 4.0)
+            });
+        }
+
+        // Create visual steps
+        for (let i = 0; i < totalSteps; i++) {
+            const angle = (i / stepsPerLevel) * Math.PI * 2;
+            const y = 2 + (i / totalSteps) * totalHeight;
+
+            const stepX = Math.cos(angle) * radius;
+            const stepZ = Math.sin(angle) * radius;
+
+            const stepGeometry = new THREE.BoxGeometry(2.5, 0.3, 1.5);
+            const step = new THREE.Mesh(stepGeometry, this.woodMaterial);
+            step.position.set(stepX, y, stepZ);
+            step.rotation.y = angle + Math.PI / 2;
+            step.castShadow = true;
+            step.receiveShadow = true;
+            parent.add(step);
+
+            // Support posts
+            if (i % 6 === 0) {
+                const postGeometry = new THREE.CylinderGeometry(0.08, 0.08, y, 8);
+                const post = new THREE.Mesh(postGeometry, this.darkWoodMaterial);
+                post.position.set(stepX, y / 2, stepZ);
+                post.castShadow = true;
+                parent.add(post);
+            }
+        }
+
+        // Create collision for each visual step - more accurate than segments
+        // Use every 4th step for collision to reduce overlap issues
+        for (let i = 0; i < totalSteps; i += 4) {
+            const angle = (i / stepsPerLevel) * Math.PI * 2;
+            const y = 2 + (i / totalSteps) * totalHeight;
+
+            const stepX = Math.cos(angle) * radius;
+            const stepZ = Math.sin(angle) * radius;
+
+            // Create collision box aligned with step
+            // Use larger box to cover multiple visual steps
+            this.physicsSystem.addStaticBody({
+                type: 'box',
+                position: new THREE.Vector3(towerX + stepX, y, towerZ + stepZ),
+                size: new THREE.Vector3(4.0, 0.3, 3.5)
+            });
+        }
+    }
+
+    createTowerPlatform(parent, towerX, towerZ, size, y) {
+        // Circular walkable platform at tower level
+        const platformGeometry = new THREE.CylinderGeometry(size, size, 0.3, 8);
+        const platform = new THREE.Mesh(platformGeometry, this.woodMaterial);
+        platform.position.y = y + 0.15;
+        platform.castShadow = true;
+        platform.receiveShadow = true;
+        parent.add(platform);
+
+        // Add physics for platform
+        this.physicsSystem.addStaticBody({
+            type: 'box',
+            position: new THREE.Vector3(towerX, y + 0.15, towerZ),
+            size: new THREE.Vector3(size * 2, 0.3, size * 2)
+        });
     }
 
     createRoof(parent, size, y) {
@@ -576,11 +677,11 @@ export class NinjaCastle {
     }
 
     createDecorations() {
-        // Lanterns
-        this.createLantern(-5, 2, 10);
-        this.createLantern(5, 2, 10);
-        this.createLantern(-5, 2, -10);
-        this.createLantern(5, 2, -10);
+        // Lanterns on ground with posts
+        this.createGroundLantern(-5, 10);
+        this.createGroundLantern(5, 10);
+        this.createGroundLantern(-5, -10);
+        this.createGroundLantern(5, -10);
 
         // Torii gates
         this.createToriiGate(0, 35);
@@ -592,15 +693,54 @@ export class NinjaCastle {
         this.createTree(-30, 0, -10, 0x90ee90);
         this.createTree(30, 0, -10, 0x90ee90);
 
-        // Training dummies
-        this.createTrainingDummy(-25, 0.5, -2);
-        this.createTrainingDummy(-25, 0.5, 2);
-        this.createTrainingDummy(25, 0.5, -2);
-        this.createTrainingDummy(25, 0.5, 2);
+        // Training dummies on ground
+        this.createTrainingDummy(-25, 0, -2);
+        this.createTrainingDummy(-25, 0, 2);
+        this.createTrainingDummy(25, 0, -2);
+        this.createTrainingDummy(25, 0, 2);
 
-        // Weapon racks
+        // Weapon racks on ground
         this.createWeaponRack(-10, 5);
         this.createWeaponRack(10, 5);
+    }
+
+    createGroundLantern(x, z) {
+        const group = new THREE.Group();
+        group.position.set(x, 0, z);
+
+        // Post to hold lantern
+        const postGeometry = new THREE.CylinderGeometry(0.08, 0.1, 2.5, 8);
+        const post = new THREE.Mesh(postGeometry, this.darkWoodMaterial);
+        post.position.y = 1.25;
+        post.castShadow = true;
+        group.add(post);
+
+        // Lantern body at top of post
+        const lanternGeometry = new THREE.BoxGeometry(0.6, 0.8, 0.6);
+        const lantern = new THREE.Mesh(lanternGeometry, this.paperMaterial);
+        lantern.position.y = 2.5;
+        group.add(lantern);
+
+        // Frame
+        const frameGeometry = new THREE.BoxGeometry(0.65, 0.1, 0.65);
+        const topFrame = new THREE.Mesh(frameGeometry, this.darkWoodMaterial);
+        topFrame.position.y = 2.9;
+        group.add(topFrame);
+
+        const bottomFrame = topFrame.clone();
+        bottomFrame.position.y = 2.1;
+        group.add(bottomFrame);
+
+        // Light
+        const light = new THREE.PointLight(0xffaa44, 0.8, 8);
+        light.position.y = 2.5;
+        light.castShadow = true;
+        light.shadow.mapSize.width = 256;
+        light.shadow.mapSize.height = 256;
+        group.add(light);
+
+        this.lights.push(light);
+        this.castle.add(group);
     }
 
     createLantern(x, y, z) {

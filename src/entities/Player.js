@@ -47,7 +47,7 @@ export class Player {
 
         // Abilities
         this.abilities = {
-            slash: { cooldown: 0, maxCooldown: 1, damage: 60, staminaCost: 10 },
+            slash: { cooldown: 0, maxCooldown: 0.5, damage: 60, staminaCost: 5 },
             spin: { cooldown: 0, maxCooldown: 4, damage: 80, staminaCost: 20 },
             dash: { cooldown: 0, maxCooldown: 2, distance: 10, staminaCost: 15 },
             fireBlast: { cooldown: 0, maxCooldown: 6, damage: 120, staminaCost: 30 }
@@ -187,9 +187,9 @@ export class Player {
             this.rotation.x = Math.max(this.minPitch, Math.min(this.maxPitch, this.rotation.x));
         });
 
-        // Attack (left click)
+        // Attack (left click) - trigger slash ability
         this.inputManager.onMouseDown(0, () => {
-            this.performAttack();
+            this.useAbility('slash');
         });
 
         // Block (right click)
@@ -283,8 +283,8 @@ export class Player {
         const newPosition = this.position.clone();
         newPosition.addScaledVector(this.velocity, deltaTime);
 
-        // Ground collision
-        const groundHeight = this.physicsSystem.getGroundHeight(newPosition);
+        // Ground collision - pass current Y to prevent teleporting to surfaces far above
+        const groundHeight = this.physicsSystem.getGroundHeight(newPosition, this.position.y);
         if (newPosition.y < groundHeight + 1.7) {
             newPosition.y = groundHeight + 1.7;
             this.velocity.y = 0;
@@ -351,22 +351,61 @@ export class Player {
 
         if (this.currentAnimation === 'attack') {
             // Basic attack - horizontal slash with combo variations
-            const comboOffset = (this.comboCount - 1) * 0.3;
-            const swingPhase = Math.sin(progress * Math.PI);
-
             // Alternate swing direction based on combo
             const direction = this.comboCount % 2 === 1 ? 1 : -1;
 
-            this.weaponModel.position.set(
-                0.35 + swingPhase * 0.2 * direction,
-                -0.35 + swingPhase * 0.15,
-                -0.6 - swingPhase * 0.25
-            );
-            this.weaponModel.rotation.set(
-                -0.3 + swingPhase * 1.2,
-                -0.4 + swingPhase * direction * 1.5,
-                0.4 - swingPhase * direction * 0.8
-            );
+            // Three phases: windup (0-0.25), strike (0.25-0.7), recovery (0.7-1.0)
+            if (progress < 0.25) {
+                // Windup - pull weapon back
+                const windupProgress = progress / 0.25;
+                const ease = windupProgress * windupProgress; // ease in
+
+                this.weaponModel.position.set(
+                    0.35 + ease * 0.3 * direction,
+                    -0.35 + ease * 0.2,
+                    -0.6 + ease * 0.15
+                );
+                this.weaponModel.rotation.set(
+                    -0.3 - ease * 0.5,
+                    -0.4 - ease * 0.6 * direction,
+                    0.4 - ease * 0.4 * direction
+                );
+            } else if (progress < 0.7) {
+                // Strike - fast horizontal swing
+                const strikeProgress = (progress - 0.25) / 0.45;
+                const ease = 1 - Math.pow(1 - strikeProgress, 3); // ease out cubic
+
+                this.weaponModel.position.set(
+                    0.65 * direction - ease * 1.3 * direction,
+                    -0.15 - ease * 0.1,
+                    -0.45 - ease * 0.3
+                );
+                this.weaponModel.rotation.set(
+                    -0.8 + ease * 0.3,
+                    -1.0 * direction + ease * 1.8 * direction,
+                    -0.4 * direction + ease * 0.8 * direction
+                );
+            } else {
+                // Recovery - return to ready position
+                const recoveryProgress = (progress - 0.7) / 0.3;
+                const startX = -0.65 * direction;
+                const startY = -0.25;
+                const startZ = -0.75;
+                const startRotX = -0.5;
+                const startRotY = 0.8 * direction;
+                const startRotZ = 0.4 * direction;
+
+                this.weaponModel.position.set(
+                    startX + (0.35 - startX) * recoveryProgress,
+                    startY + (-0.35 - startY) * recoveryProgress,
+                    startZ + (-0.6 - startZ) * recoveryProgress
+                );
+                this.weaponModel.rotation.set(
+                    startRotX + (-0.3 - startRotX) * recoveryProgress,
+                    startRotY + (-0.4 - startRotY) * recoveryProgress,
+                    startRotZ + (0.4 - startRotZ) * recoveryProgress
+                );
+            }
         } else if (this.currentAnimation === 'slash') {
             // Slash ability - powerful diagonal cut
             const windUp = progress < 0.3 ? progress / 0.3 : 1;
@@ -574,8 +613,8 @@ export class Player {
                 // Teleport forward
                 const dashTarget = this.position.clone();
                 dashTarget.addScaledVector(direction, ability.distance);
-                const groundHeight = this.physicsSystem.getGroundHeight(dashTarget);
-                dashTarget.y = groundHeight + 1.7;
+                const dashGroundHeight = this.physicsSystem.getGroundHeight(dashTarget, this.position.y);
+                dashTarget.y = dashGroundHeight + 1.7;
                 this.position.copy(dashTarget);
                 return {
                     type: 'dash',

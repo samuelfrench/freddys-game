@@ -46,8 +46,14 @@ export class PhysicsSystem {
         }
     }
 
-    getGroundHeight(position) {
+    getGroundHeight(position, currentY = null) {
         let maxHeight = 0;
+
+        // Max step height the player can climb onto (prevents teleporting to surfaces far above)
+        const maxStepHeight = 1.0;
+        // Player height offset (feet position relative to position.y)
+        const playerFeetOffset = 1.7;
+        const feetY = currentY !== null ? currentY - playerFeetOffset : (position.y - playerFeetOffset);
 
         // Check against all static bodies that could act as ground
         for (const body of this.staticBodies) {
@@ -62,7 +68,11 @@ export class PhysicsSystem {
                 if (position.x >= minX && position.x <= maxX &&
                     position.z >= minZ && position.z <= maxZ) {
                     const topY = body.position.y + halfSize.y;
-                    if (topY > maxHeight) {
+
+                    // Only consider surfaces that are:
+                    // 1. Below or at current feet level (standing on it)
+                    // 2. Within step height above current feet (can step up onto it)
+                    if (topY <= feetY + maxStepHeight && topY > maxHeight) {
                         maxHeight = topY;
                     }
                 }
