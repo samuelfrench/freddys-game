@@ -13,6 +13,7 @@ import { AudioSystem } from '../systems/AudioSystem.js';
 import { WaveSystem } from '../systems/WaveSystem.js';
 import { Player } from '../entities/Player.js';
 import { NinjaCastle } from '../entities/NinjaCastle.js';
+import { CompanionCat } from '../entities/CompanionCat.js';
 import { UIManager } from '../systems/UIManager.js';
 import { Minimap } from '../systems/Minimap.js';
 import { qualitySettings } from '../systems/QualitySettings.js';
@@ -47,6 +48,7 @@ export class Game {
         // Game entities
         this.player = null;
         this.castle = null;
+        this.companionCat = null;
         this.enemies = [];
         this.tombstones = [];
 
@@ -115,6 +117,9 @@ export class Game {
 
         // Initialize combat system
         this.combatSystem = new CombatSystem(this.player, this.aiSystem);
+
+        // Create companion cat
+        this.companionCat = new CompanionCat(this.scene, this.player, this.aiSystem);
 
         // Initialize particle system
         this.particleSystem = new ParticleSystem(this.scene);
@@ -246,6 +251,9 @@ export class Game {
     update() {
         // Update player
         this.player.update(this.deltaTime);
+
+        // Update companion cat
+        this.companionCat.update(this.deltaTime);
 
         // Update physics
         this.physicsSystem.update(this.deltaTime);
@@ -451,6 +459,9 @@ export class Game {
 
         // Reset player
         this.player.reset();
+
+        // Reset companion cat position
+        this.companionCat.teleportToPlayer();
 
         // Clear enemies
         this.aiSystem.clearAllEnemies();
