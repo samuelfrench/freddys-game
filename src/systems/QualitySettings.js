@@ -1,5 +1,6 @@
 /**
  * Quality Settings System - Performance optimization presets
+ * With improved compatibility detection
  */
 
 export class QualitySettings {
@@ -24,7 +25,7 @@ export class QualitySettings {
             },
             medium: {
                 name: 'Medium',
-                postProcessing: true,
+                postProcessing: false, // Disabled by default for safety
                 shadows: false,
                 particleMultiplier: 0.5,
                 maxParticles: 500,
@@ -32,8 +33,8 @@ export class QualitySettings {
                 enemyUpdateRate: 0.05, // Update every 50ms
                 antialias: true,
                 pixelRatio: 1.0,
-                bloomEnabled: true,
-                vignetteEnabled: true,
+                bloomEnabled: false,
+                vignetteEnabled: false,
                 chromaticAberration: false,
                 filmGrain: false,
                 castleLOD: 'medium',
@@ -48,7 +49,7 @@ export class QualitySettings {
                 drawDistance: 200,
                 enemyUpdateRate: 0.016, // Update every frame
                 antialias: true,
-                pixelRatio: window.devicePixelRatio || 1,
+                pixelRatio: Math.min(window.devicePixelRatio || 1, 2), // Cap at 2
                 bloomEnabled: true,
                 vignetteEnabled: true,
                 chromaticAberration: true,
@@ -58,61 +59,110 @@ export class QualitySettings {
             }
         };
 
-        // Auto-detect best quality
+        // Auto-detect best quality - default to medium for safety
         this.currentPreset = this.detectOptimalQuality();
         this.settings = { ...this.presets[this.currentPreset] };
 
         this.listeners = [];
+
+        console.log(`[QualitySettings] Initialized with preset: ${this.currentPreset}`);
     }
 
     detectOptimalQuality() {
+        console.log('[QualitySettings] Detecting optimal quality...');
+
         // Check for WebGL capabilities
-        const canvas = document.createElement('canvas');
-        const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+        let canvas;
+        let gl;
+        try {
+            canvas = document.createElement('canvas');
+            gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+        } catch (e) {
+            console.log('[QualitySettings] WebGL context creation failed', e);
+            return 'low';
+        }
 
         if (!gl) {
+            console.log('[QualitySettings] No WebGL support');
             return 'low';
         }
 
         // Check renderer info
-        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
         let renderer = '';
-        if (debugInfo) {
-            renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL).toLowerCase();
+        let vendor = '';
+        try {
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            if (debugInfo) {
+                renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL).toLowerCase();
+                vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL).toLowerCase();
+            }
+            console.log(`[QualitySettings] GPU: ${vendor} - ${renderer}`);
+        } catch (e) {
+            console.log('[QualitySettings] Could not get GPU info');
         }
 
-        // Detect VM/software rendering
+        // Detect problematic configurations
         const isSoftwareRenderer = renderer.includes('swiftshader') ||
                                    renderer.includes('llvmpipe') ||
                                    renderer.includes('software') ||
-                                   renderer.includes('mesa');
+                                   renderer.includes('mesa') ||
+                                   renderer.includes('microsoft basic');
 
         if (isSoftwareRenderer) {
-            console.log('Software renderer detected, using low quality');
+            console.log('[QualitySettings] Software renderer detected, using low quality');
             return 'low';
+        }
+
+        // Detect Apple GPU (macOS) - can have shader compatibility issues
+        const isAppleGPU = renderer.includes('apple') ||
+                          vendor.includes('apple') ||
+                          renderer.includes('m1') ||
+                          renderer.includes('m2') ||
+                          renderer.includes('m3');
+
+        if (isAppleGPU) {
+            console.log('[QualitySettings] Apple GPU detected, using medium quality (no post-processing)');
+            return 'medium';
         }
 
         // Check for integrated graphics
         const isIntegrated = renderer.includes('intel') ||
-                            renderer.includes('integrated');
+                            renderer.includes('integrated') ||
+                            renderer.includes('uhd') ||
+                            renderer.includes('iris');
 
         if (isIntegrated) {
-            console.log('Integrated graphics detected, using medium quality');
+            console.log('[QualitySettings] Integrated graphics detected, using medium quality');
+            return 'medium';
+        }
+
+        // Check for mobile/low-power GPUs
+        const isMobileGPU = renderer.includes('mali') ||
+                          renderer.includes('adreno') ||
+                          renderer.includes('powervr') ||
+                          renderer.includes('tegra');
+
+        if (isMobileGPU) {
+            console.log('[QualitySettings] Mobile GPU detected, using medium quality');
             return 'medium';
         }
 
         // Check device memory (if available)
         if (navigator.deviceMemory && navigator.deviceMemory < 4) {
+            console.log('[QualitySettings] Low memory detected, using medium quality');
             return 'medium';
         }
 
         // Check hardware concurrency
         if (navigator.hardwareConcurrency && navigator.hardwareConcurrency < 4) {
+            console.log('[QualitySettings] Low CPU cores detected, using medium quality');
             return 'medium';
         }
 
-        console.log('Dedicated GPU detected, using high quality');
-        return 'high';
+        // Default to medium for unknown configs to be safe
+        // Users can manually switch to high if they want
+        console.log('[QualitySettings] Using medium quality by default (switch to High manually for effects)');
+        return 'medium';
     }
 
     setQuality(preset) {

@@ -1,5 +1,6 @@
 /**
  * Advanced Renderer with Post-Processing Effects and Quality Settings
+ * With WebGL compatibility fixes and error handling
  */
 
 import * as THREE from 'three';
@@ -13,6 +14,7 @@ export class Renderer {
         this.composer = null;
         this.renderTarget = null;
         this.postProcessingEnabled = true;
+        this.postProcessingFailed = false; // Track if post-processing setup failed
 
         // Shader passes
         this.bloomPass = null;
@@ -21,24 +23,84 @@ export class Renderer {
         // Quality settings
         this.settings = qualitySettings.settings;
 
+        // Debug logging for remote troubleshooting
+        this.debugLog('Renderer initializing...');
+
         // Listen for quality changes
         qualitySettings.onChange((newSettings) => {
             this.applyQualitySettings(newSettings);
         });
     }
 
+    debugLog(message, data = null) {
+        const timestamp = new Date().toISOString();
+        if (data) {
+            console.log(`[Renderer ${timestamp}] ${message}`, data);
+        } else {
+            console.log(`[Renderer ${timestamp}] ${message}`);
+        }
+    }
+
     async init() {
         const settings = qualitySettings.settings;
 
-        // Create WebGL renderer with quality-based settings
-        this.renderer = new THREE.WebGLRenderer({
+        // Check WebGL support first
+        if (!this.checkWebGLSupport()) {
+            throw new Error('WebGL is not supported on this device');
+        }
+
+        this.debugLog('Creating WebGL renderer with settings:', {
             antialias: settings.antialias,
-            powerPreference: 'high-performance',
-            stencil: false
+            pixelRatio: settings.pixelRatio,
+            postProcessing: settings.postProcessing
+        });
+
+        // Create WebGL renderer with quality-based settings
+        // Try WebGL2 first, fallback to WebGL1
+        let canvas = document.createElement('canvas');
+        let context = canvas.getContext('webgl2');
+        const isWebGL2 = !!context;
+
+        this.debugLog(`WebGL version: ${isWebGL2 ? 'WebGL2' : 'WebGL1'}`);
+
+        try {
+            this.renderer = new THREE.WebGLRenderer({
+                antialias: settings.antialias,
+                powerPreference: 'high-performance',
+                stencil: false,
+                failIfMajorPerformanceCaveat: false // Don't fail on software renderers
+            });
+        } catch (e) {
+            this.debugLog('WebGLRenderer creation failed, trying with basic settings', e);
+            // Fallback with minimal settings
+            this.renderer = new THREE.WebGLRenderer({
+                antialias: false,
+                powerPreference: 'default'
+            });
+        }
+
+        // Verify renderer was created successfully
+        if (!this.renderer || !this.renderer.domElement) {
+            throw new Error('Failed to create WebGL renderer');
+        }
+
+        // Check for context loss
+        this.renderer.domElement.addEventListener('webglcontextlost', (event) => {
+            event.preventDefault();
+            this.debugLog('WebGL context lost!');
+            this.handleContextLost();
+        });
+
+        this.renderer.domElement.addEventListener('webglcontextrestored', () => {
+            this.debugLog('WebGL context restored');
+            this.handleContextRestored();
         });
 
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(Math.min(settings.pixelRatio, 2));
+
+        // Log GPU info for debugging
+        this.logGPUInfo();
 
         // Enable shadows based on quality
         this.renderer.shadowMap.enabled = settings.shadows;
@@ -54,40 +116,139 @@ export class Renderer {
         // Add to DOM
         document.getElementById('game-container').appendChild(this.renderer.domElement);
 
-        // Setup custom post-processing
+        // Setup custom post-processing with error handling
         if (settings.postProcessing) {
-            await this.setupPostProcessing();
+            try {
+                await this.setupPostProcessing();
+                this.debugLog('Post-processing setup successful');
+            } catch (e) {
+                this.debugLog('Post-processing setup failed, disabling', e);
+                this.postProcessingFailed = true;
+                this.postProcessingEnabled = false;
+            }
         }
 
-        this.postProcessingEnabled = settings.postProcessing;
+        this.postProcessingEnabled = settings.postProcessing && !this.postProcessingFailed;
+        this.debugLog(`Final post-processing state: ${this.postProcessingEnabled}`);
+    }
+
+    checkWebGLSupport() {
+        try {
+            const canvas = document.createElement('canvas');
+            const gl = canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            if (!gl) {
+                this.debugLog('WebGL not supported');
+                return false;
+            }
+            this.debugLog('WebGL supported');
+            return true;
+        } catch (e) {
+            this.debugLog('WebGL check failed', e);
+            return false;
+        }
+    }
+
+    logGPUInfo() {
+        try {
+            const gl = this.renderer.getContext();
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            if (debugInfo) {
+                const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+                const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                this.debugLog('GPU Info:', { vendor, renderer });
+            }
+
+            // Log important WebGL parameters
+            this.debugLog('WebGL Parameters:', {
+                maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+                maxRenderbufferSize: gl.getParameter(gl.MAX_RENDERBUFFER_SIZE),
+                maxViewportDims: gl.getParameter(gl.MAX_VIEWPORT_DIMS),
+                version: gl.getParameter(gl.VERSION),
+                shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION)
+            });
+        } catch (e) {
+            this.debugLog('Could not get GPU info', e);
+        }
+    }
+
+    handleContextLost() {
+        // Disable rendering until context is restored
+        this.postProcessingEnabled = false;
+    }
+
+    handleContextRestored() {
+        // Re-setup post-processing
+        if (this.settings.postProcessing && !this.postProcessingFailed) {
+            this.setupPostProcessing().catch(e => {
+                this.debugLog('Failed to restore post-processing', e);
+            });
+        }
     }
 
     async setupPostProcessing() {
         const pixelRatio = qualitySettings.get('pixelRatio') || 1;
 
-        // Create render targets for multi-pass rendering
-        this.renderTarget = new THREE.WebGLRenderTarget(
-            window.innerWidth * Math.min(pixelRatio, 2),
-            window.innerHeight * Math.min(pixelRatio, 2),
-            {
-                minFilter: THREE.LinearFilter,
-                magFilter: THREE.LinearFilter,
-                format: THREE.RGBAFormat,
-                colorSpace: THREE.SRGBColorSpace
-            }
-        );
+        this.debugLog('Setting up post-processing...');
 
-        // Create post-processing quad
-        this.postProcessQuad = this.createPostProcessQuad();
+        // Create render targets for multi-pass rendering
+        try {
+            this.renderTarget = new THREE.WebGLRenderTarget(
+                window.innerWidth * Math.min(pixelRatio, 2),
+                window.innerHeight * Math.min(pixelRatio, 2),
+                {
+                    minFilter: THREE.LinearFilter,
+                    magFilter: THREE.LinearFilter,
+                    format: THREE.RGBAFormat,
+                    colorSpace: THREE.SRGBColorSpace
+                }
+            );
+
+            // Verify render target was created
+            if (!this.renderTarget || !this.renderTarget.texture) {
+                throw new Error('Failed to create render target');
+            }
+            this.debugLog('Render target created successfully');
+        } catch (e) {
+            this.debugLog('Render target creation failed', e);
+            throw e;
+        }
+
+        // Create post-processing quad with shader error handling
+        try {
+            this.postProcessQuad = this.createPostProcessQuad();
+
+            // Check if shader compiled successfully
+            if (this.postProcessQuad && this.postProcessQuad.material) {
+                // Force shader compilation to catch errors early
+                this.renderer.compile(new THREE.Scene().add(this.postProcessQuad.clone()),
+                    new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1));
+
+                // Check for shader errors
+                const gl = this.renderer.getContext();
+                const error = gl.getError();
+                if (error !== gl.NO_ERROR) {
+                    this.debugLog('WebGL error after shader compilation:', error);
+                }
+            }
+        } catch (e) {
+            this.debugLog('Post-process quad creation failed', e);
+            throw e;
+        }
+
         this.postProcessScene = new THREE.Scene();
         this.postProcessCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
         this.postProcessScene.add(this.postProcessQuad);
+
+        this.debugLog('Post-processing setup complete');
     }
 
     createPostProcessQuad() {
         const settings = qualitySettings.settings;
 
+        this.debugLog('Creating post-process shader...');
+
         // Custom shader for bloom + vignette + chromatic aberration
+        // Using precision qualifiers for better cross-platform compatibility
         const shader = {
             uniforms: {
                 tDiffuse: { value: null },
@@ -99,6 +260,7 @@ export class Renderer {
                 uFilmGrain: { value: settings.filmGrain ? 0.03 : 0.0 }
             },
             vertexShader: `
+                precision highp float;
                 varying vec2 vUv;
                 void main() {
                     vUv = uv;
@@ -106,6 +268,8 @@ export class Renderer {
                 }
             `,
             fragmentShader: `
+                precision highp float;
+
                 uniform sampler2D tDiffuse;
                 uniform float uTime;
                 uniform vec2 uResolution;
@@ -116,72 +280,60 @@ export class Renderer {
 
                 varying vec2 vUv;
 
-                vec3 sampleWithCA(vec2 uv) {
-                    if (uChromaticAberration <= 0.0) {
-                        return texture2D(tDiffuse, uv).rgb;
-                    }
-                    vec2 center = vec2(0.5);
-                    vec2 dir = uv - center;
-                    float dist = length(dir);
-
-                    float r = texture2D(tDiffuse, uv + dir * uChromaticAberration * dist).r;
-                    float g = texture2D(tDiffuse, uv).g;
-                    float b = texture2D(tDiffuse, uv - dir * uChromaticAberration * dist).b;
-
-                    return vec3(r, g, b);
-                }
-
-                vec3 blur(vec2 uv, float radius) {
-                    if (uBloomStrength <= 0.0) {
-                        return texture2D(tDiffuse, uv).rgb;
-                    }
-                    vec3 color = vec3(0.0);
-                    float total = 0.0;
-
-                    // Reduced blur samples for performance
-                    for (float x = -1.0; x <= 1.0; x += 1.0) {
-                        for (float y = -1.0; y <= 1.0; y += 1.0) {
-                            vec2 offset = vec2(x, y) * radius / uResolution;
-                            float weight = 1.0 - length(vec2(x, y)) / 2.0;
-                            color += texture2D(tDiffuse, uv + offset).rgb * weight;
-                            total += weight;
-                        }
-                    }
-
-                    return color / total;
-                }
-
                 void main() {
-                    // Sample with chromatic aberration
-                    vec3 color = sampleWithCA(vUv);
+                    // Base color sample - simple and safe
+                    vec4 texColor = texture2D(tDiffuse, vUv);
+                    vec3 color = texColor.rgb;
 
-                    // Simple bloom (bright areas glow)
-                    if (uBloomStrength > 0.0) {
-                        vec3 blurred = blur(vUv, 2.0);
-                        float brightness = dot(blurred, vec3(0.2126, 0.7152, 0.0722));
-                        vec3 bloom = blurred * smoothstep(0.5, 1.0, brightness) * uBloomStrength;
-                        color += bloom;
+                    // Chromatic aberration (simplified for compatibility)
+                    if (uChromaticAberration > 0.0) {
+                        vec2 dir = vUv - vec2(0.5);
+                        float dist = length(dir);
+                        float caOffset = uChromaticAberration * dist;
+
+                        float r = texture2D(tDiffuse, vUv + dir * caOffset).r;
+                        float b = texture2D(tDiffuse, vUv - dir * caOffset).b;
+                        color = vec3(r, color.g, b);
                     }
 
-                    // Vignette
+                    // Simple bloom (bright areas glow) - simplified 5-tap blur
+                    if (uBloomStrength > 0.0) {
+                        vec2 texelSize = vec2(1.0) / uResolution;
+                        vec3 blurred = color;
+                        blurred += texture2D(tDiffuse, vUv + texelSize * vec2(-2.0, 0.0)).rgb;
+                        blurred += texture2D(tDiffuse, vUv + texelSize * vec2(2.0, 0.0)).rgb;
+                        blurred += texture2D(tDiffuse, vUv + texelSize * vec2(0.0, -2.0)).rgb;
+                        blurred += texture2D(tDiffuse, vUv + texelSize * vec2(0.0, 2.0)).rgb;
+                        blurred *= 0.2;
+
+                        float brightness = dot(blurred, vec3(0.2126, 0.7152, 0.0722));
+                        float bloomMask = smoothstep(0.5, 1.0, brightness);
+                        color += blurred * bloomMask * uBloomStrength;
+                    }
+
+                    // Vignette - safe calculation avoiding division issues
                     if (uVignetteStrength > 0.0) {
-                        vec2 center = vUv - 0.5;
-                        float dist = length(center);
+                        vec2 centered = vUv - vec2(0.5);
+                        float dist = length(centered);
                         float vignette = 1.0 - smoothstep(0.3, 0.9, dist) * uVignetteStrength;
                         color *= vignette;
                     }
 
-                    // Film grain
+                    // Film grain - using simpler noise function
                     if (uFilmGrain > 0.0) {
-                        float grain = (fract(sin(dot(vUv * uTime, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * uFilmGrain;
-                        color += grain;
+                        float noise = fract(sin(dot(vUv, vec2(12.9898, 78.233)) + uTime) * 43758.5453);
+                        float grain = (noise - 0.5) * uFilmGrain;
+                        color += vec3(grain);
                     }
 
-                    // Color grading - slight teal shadows, orange highlights
-                    vec3 shadows = vec3(0.0, 0.05, 0.1);
-                    vec3 highlights = vec3(0.1, 0.05, 0.0);
+                    // Subtle color grading
                     float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
-                    color = mix(color + shadows * (1.0 - luminance), color + highlights * luminance, luminance);
+                    vec3 shadows = vec3(0.0, 0.05, 0.1) * (1.0 - luminance);
+                    vec3 highlights = vec3(0.1, 0.05, 0.0) * luminance;
+                    color = color + shadows + highlights;
+
+                    // Clamp to valid range
+                    color = clamp(color, 0.0, 1.0);
 
                     gl_FragColor = vec4(color, 1.0);
                 }
@@ -191,7 +343,15 @@ export class Renderer {
         const geometry = new THREE.PlaneGeometry(2, 2);
         const material = new THREE.ShaderMaterial(shader);
 
-        return new THREE.Mesh(geometry, material);
+        // Enable shader error checking
+        material.onBeforeCompile = (shader) => {
+            this.debugLog('Shader compiling...');
+        };
+
+        const mesh = new THREE.Mesh(geometry, material);
+
+        this.debugLog('Post-process quad created');
+        return mesh;
     }
 
     applyQualitySettings(settings) {
@@ -233,18 +393,33 @@ export class Renderer {
     }
 
     render(time) {
-        if (this.postProcessingEnabled && this.renderTarget) {
-            // Render scene to texture
-            this.renderer.setRenderTarget(this.renderTarget);
-            this.renderer.render(this.scene, this.camera);
+        try {
+            if (this.postProcessingEnabled && this.renderTarget && this.postProcessQuad && !this.postProcessingFailed) {
+                // Render scene to texture
+                this.renderer.setRenderTarget(this.renderTarget);
+                this.renderer.render(this.scene, this.camera);
 
-            // Apply post-processing
-            this.renderer.setRenderTarget(null);
-            this.postProcessQuad.material.uniforms.tDiffuse.value = this.renderTarget.texture;
-            this.postProcessQuad.material.uniforms.uTime.value = time;
-            this.renderer.render(this.postProcessScene, this.postProcessCamera);
-        } else {
-            this.renderer.render(this.scene, this.camera);
+                // Apply post-processing
+                this.renderer.setRenderTarget(null);
+                this.postProcessQuad.material.uniforms.tDiffuse.value = this.renderTarget.texture;
+                this.postProcessQuad.material.uniforms.uTime.value = time;
+                this.renderer.render(this.postProcessScene, this.postProcessCamera);
+            } else {
+                // Direct render without post-processing
+                this.renderer.setRenderTarget(null);
+                this.renderer.render(this.scene, this.camera);
+            }
+        } catch (e) {
+            // If rendering fails, try direct render as fallback
+            this.debugLog('Render error, falling back to direct render', e);
+            this.postProcessingFailed = true;
+            this.postProcessingEnabled = false;
+            try {
+                this.renderer.setRenderTarget(null);
+                this.renderer.render(this.scene, this.camera);
+            } catch (e2) {
+                this.debugLog('Direct render also failed', e2);
+            }
         }
     }
 
