@@ -15,6 +15,12 @@ export class UIManager {
         this.scoreDisplay = document.getElementById('score');
         this.waveInfo = document.getElementById('wave-info');
         this.enemyCount = document.getElementById('enemy-count');
+        this.objectiveLine = document.getElementById('objective-line');
+        this.bossPanel = document.getElementById('boss-panel');
+        this.bossName = document.getElementById('boss-name');
+        this.bossHealthBar = document.getElementById('boss-health-bar');
+        this.bossHealthValue = document.getElementById('boss-health-value');
+        this.bossTelegraphStatus = document.getElementById('boss-telegraph-status');
         this.damageOverlay = document.getElementById('damage-overlay');
         this.notification = document.getElementById('notification');
 
@@ -41,6 +47,8 @@ export class UIManager {
         this.updateStaminaBar();
         this.updateScore();
         this.updateWaveInfo();
+        this.updateObjectiveInfo();
+        this.updateBossHealthBar();
         this.updateAbilities();
         this.updateDamageOverlay();
     }
@@ -101,6 +109,53 @@ export class UIManager {
         }
 
         this.enemyCount.textContent = details.join(' | ');
+    }
+
+    updateObjectiveInfo() {
+        if (!this.objectiveLine) return;
+
+        const objective = this.game.getObjectiveStatus?.();
+        if (!objective) {
+            this.objectiveLine.textContent = '';
+            return;
+        }
+
+        this.objectiveLine.textContent = `Objective: ${objective.label} - ${objective.distance}m`;
+        if (objective.color) {
+            this.objectiveLine.style.color = objective.color;
+        }
+    }
+
+    updateBossHealthBar() {
+        if (!this.bossPanel) return;
+
+        const boss = this.game.bossEnemy;
+        const showBoss = Boolean(boss && boss.health > 0);
+        this.bossPanel.classList.toggle('visible', showBoss);
+
+        if (!showBoss) {
+            if (this.bossTelegraphStatus) this.bossTelegraphStatus.textContent = '';
+            return;
+        }
+
+        const bossMaxHealth = boss.maxHealth || boss.health || 1;
+        const bossHealth = Math.max(0, Math.ceil(boss.health));
+        const bossPercent = Math.max(0, Math.min(100, (bossHealth / bossMaxHealth) * 100));
+
+        if (this.bossName) {
+            this.bossName.textContent = boss.name || 'Storm Shogun';
+        }
+        if (this.bossHealthBar) {
+            this.bossHealthBar.style.width = `${bossPercent}%`;
+        }
+        if (this.bossHealthValue) {
+            this.bossHealthValue.textContent = `${bossHealth}/${bossMaxHealth}`;
+        }
+        if (this.bossTelegraphStatus) {
+            this.bossTelegraphStatus.textContent = boss.telegraphActive
+                ? `Incoming: ${boss.telegraphName || 'Storm Cleave'}`
+                : '';
+        }
     }
 
     updateAbilities() {

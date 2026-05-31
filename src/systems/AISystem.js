@@ -94,12 +94,23 @@ class Enemy {
         // Combat
         this.attackCooldown = 0;
         this.isAttacking = false;
+        this.attackDuration = 0.3;
+        this.attackTimer = 0;
+        this.attackDamageApplied = false;
         this.hitRecently = false;
         this.hitCooldown = 0;
+        this.telegraphActive = false;
+        this.telegraphTimer = 0;
+        this.telegraphDuration = this.type === 'boss' ? 0.75 : 0;
+        this.telegraphTargetPosition = null;
+        this.telegraphAttackDamage = 0;
 
         // Visual
         this.mesh = null;
         this.createMesh();
+        if (this.type === 'boss') {
+            this.createTelegraphMesh();
+        }
 
         // Physics body
         this.body = physicsSystem.addDynamicBody({
@@ -288,6 +299,19 @@ class Enemy {
                 this.hitRecently = false;
             }
         }
+        if (this.isAttacking && this.attackTimer > 0) {
+            this.attackTimer = Math.max(0, this.attackTimer - deltaTime);
+            if (this.attackTimer <= 0) {
+                this.isAttacking = false;
+            }
+        }
+        if (this.telegraphActive) {
+            this.telegraphTimer = Math.max(0, this.telegraphTimer - deltaTime);
+            this.updateTelegraphMesh();
+            if (this.telegraphTimer <= 0) {
+                this.activateTelegraphedAttack();
+            }
+        }
 
         // Update state timer
         this.stateTimer += deltaTime;
@@ -364,16 +388,108 @@ class Enemy {
         if (this.attackCooldown > 0) return null;
 
         this.isAttacking = true;
+        this.attackTimer = this.attackDuration;
+        this.attackDamageApplied = false;
         this.attackCooldown = 1 / this.attackSpeed;
-
-        setTimeout(() => {
-            this.isAttacking = false;
-        }, 300);
 
         return {
             damage: this.attackDamage,
             position: this.position.clone(),
             range: this.attackRange
+        };
+    }
+
+    startAttackTelegraph(targetPosition) {
+        if (this.type !== 'boss' || this.attackCooldown > 0 || this.telegraphActive || this.isAttacking) {
+            return false;
+        }
+
+        this.telegraphActive = true;
+        this.telegraphDuration = this.telegraphDuration || 0.75;
+        this.telegraphTimer = this.telegraphDuration;
+        this.telegraphTargetPosition = targetPosition.clone();
+        this.telegraphAttackDamage = this.attackDamage;
+        this.attackDamageApplied = false;
+        this.state = 'telegraph';
+        this.velocity.set(0, 0, 0);
+        this.lookAt(targetPosition);
+        this.updateTelegraphMesh();
+
+        return true;
+    }
+
+    createTelegraphMesh() {
+        const group = new THREE.Group();
+        group.visible = false;
+
+        const fillMaterial = new THREE.MeshBasicMaterial({
+            color: 0xff7a3d,
+            transparent: true,
+            opacity: 0.34,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+        const ringMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffcf8a,
+            transparent: true,
+            opacity: 0.9,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+
+        const fill = new THREE.Mesh(
+            new THREE.CircleGeometry(this.attackRange, 48),
+            fillMaterial
+        );
+        fill.rotation.x = -Math.PI / 2;
+        fill.position.y = 0.03;
+        group.add(fill);
+
+        const ring = new THREE.Mesh(
+            new THREE.RingGeometry(this.attackRange * 0.82, this.attackRange, 48),
+            ringMaterial
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.05;
+        group.add(ring);
+
+        this.telegraphMesh = group;
+        this.scene.add(group);
+    }
+
+    updateTelegraphMesh() {
+        if (!this.telegraphMesh || !this.telegraphTargetPosition) return;
+
+        this.telegraphMesh.visible = this.telegraphActive;
+        this.telegraphMesh.position.copy(this.telegraphTargetPosition);
+        this.telegraphMesh.position.y = 0.02;
+
+        const progress = this.telegraphDuration > 0
+            ? 1 - Math.max(0, this.telegraphTimer) / this.telegraphDuration
+            : 1;
+        const pulse = 0.92 + progress * 0.14 + Math.sin(Date.now() * 0.02) * 0.03;
+        this.telegraphMesh.scale.setScalar(pulse);
+    }
+
+    activateTelegraphedAttack() {
+        if (!this.telegraphActive) return null;
+
+        this.telegraphActive = false;
+        this.telegraphTimer = 0;
+        if (this.telegraphMesh) {
+            this.telegraphMesh.visible = false;
+        }
+        this.isAttacking = true;
+        this.attackTimer = this.attackDuration;
+        this.attackDamageApplied = false;
+        this.attackCooldown = 1 / this.attackSpeed;
+        this.state = 'attack';
+
+        return {
+            damage: this.telegraphAttackDamage || this.attackDamage,
+            position: this.position.clone(),
+            range: this.attackRange,
+            targetPosition: this.telegraphTargetPosition?.clone()
         };
     }
 
@@ -399,6 +515,13 @@ class Enemy {
 
     destroy() {
         this.scene.remove(this.mesh);
+        if (this.telegraphMesh) {
+            this.scene.remove(this.telegraphMesh);
+            this.telegraphMesh.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+        }
         this.physicsSystem.removeBody(this.body);
 
         // Dispose geometries and materials
@@ -636,6 +759,16 @@ export class AISystem {
 
     createBossBehavior() {
         return new BTSelector([
+            // Finish telegraph and attack animations deterministically before choosing another action.
+            new BTSequence([
+                new BTCondition((e) => e.telegraphActive || e.isAttacking),
+                new BTAction((e, ctx) => {
+                    e.velocity.set(0, 0, 0);
+                    e.lookAt(e.telegraphTargetPosition || ctx.player.position);
+                    return 'running';
+                })
+            ]),
+
             // Special attack at half health
             new BTSequence([
                 new BTCondition((e) => e.health < e.maxHealth * 0.5 && !e.enraged),
@@ -661,24 +794,7 @@ export class AISystem {
                 }),
                 new BTAction((e, ctx) => {
                     e.lookAt(ctx.player.position);
-
-                    // Three-hit combo
-                    for (let i = 0; i < 3; i++) {
-                        setTimeout(() => {
-                            if (e.health > 0) {
-                                const attack = {
-                                    damage: e.attackDamage * (1 + i * 0.2),
-                                    position: e.position.clone(),
-                                    range: e.attackRange
-                                };
-                                ctx.attacks.push({ enemy: e, ...attack });
-                                e.isAttacking = true;
-                                setTimeout(() => { e.isAttacking = false; }, 200);
-                            }
-                        }, i * 300);
-                    }
-
-                    e.attackCooldown = 2;
+                    e.startAttackTelegraph(ctx.player.position);
                     return 'success';
                 })
             ]),

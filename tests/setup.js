@@ -184,6 +184,13 @@ document.body.innerHTML = `
     <div id="score"></div>
     <div id="wave-info"></div>
     <div id="enemy-count"></div>
+    <div id="objective-line"></div>
+    <div id="boss-panel">
+        <div id="boss-name"></div>
+        <div id="boss-health-bar"></div>
+        <div id="boss-health-value"></div>
+        <div id="boss-telegraph-status"></div>
+    </div>
     <div id="damage-overlay"></div>
     <div id="notification"></div>
     <div id="pause-menu">

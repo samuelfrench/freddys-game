@@ -183,6 +183,10 @@ export class CombatSystem {
         const enemies = this.aiSystem.getEnemies();
 
         for (const enemy of enemies) {
+            if (enemy.telegraphActive || enemy.attackDamageApplied) {
+                continue;
+            }
+
             if (enemy.isAttacking && enemy.attackCooldown > 0.75 / enemy.attackSpeed) {
                 // Check if player is in range
                 const distance = enemy.position.distanceTo(this.player.position);
@@ -200,6 +204,8 @@ export class CombatSystem {
                         type: 'enemyAttack',
                         position: this.player.position.clone()
                     });
+
+                    enemy.attackDamageApplied = true;
                 }
             }
         }

@@ -117,4 +117,107 @@ test.describe('Campaign Level Flow E2E', () => {
         expect(flow.campaignComplete).toBe(true);
         expect(errors).toEqual([]);
     });
+
+    test('player can follow waypoints and defeat the boss through real inputs', async ({ page }) => {
+        test.setTimeout(120000);
+
+        const errors = [];
+        page.on('console', (message) => {
+            if (message.type() === 'error') {
+                errors.push(message.text());
+            }
+        });
+        page.on('pageerror', (error) => {
+            errors.push(error.message);
+        });
+
+        await page.goto('/');
+        await page.waitForFunction(() => {
+            return window.__GAME__ &&
+                window.__GAME__.isRunning &&
+                window.__GAME__.player &&
+                window.__GAME__.castle?.levelLandmarks?.length >= 2;
+        }, { timeout: 30000 });
+
+        await expect(page.locator('#objective-line')).toContainText('Reach the forest shrine');
+
+        await page.keyboard.down('ShiftLeft');
+        await page.keyboard.down('KeyW');
+        await page.waitForFunction(() => {
+            return window.__GAME__.levelSystem.getCurrentLevel().id === 'sunset-beach';
+        }, { timeout: 35000 });
+        await expect(page.locator('#objective-line')).toContainText('Reach the reef gate');
+
+        await page.waitForFunction(() => {
+            return window.__GAME__.levelSystem.getCurrentLevel().id === 'storm-reef';
+        }, { timeout: 35000 });
+        await page.keyboard.up('KeyW');
+        await page.keyboard.up('ShiftLeft');
+
+        await expect(page.locator('#objective-line')).toContainText('Defeat Storm Shogun');
+        await expect(page.locator('#boss-panel')).toHaveClass(/visible/);
+        await expect(page.locator('#boss-name')).toContainText('Storm Shogun');
+
+        await page.keyboard.down('ShiftLeft');
+        await page.keyboard.down('KeyW');
+        await page.waitForFunction(() => {
+            return window.__GAME__.player.position.z < -419;
+        }, { timeout: 20000 });
+        await page.keyboard.up('KeyW');
+        await page.keyboard.up('ShiftLeft');
+
+        for (let attempt = 0; attempt < 18; attempt++) {
+            await page.keyboard.press('KeyQ');
+            await page.waitForTimeout(650);
+
+            const hasWon = await page.evaluate(() => window.__GAME__.hasWon);
+            if (hasWon) break;
+        }
+
+        await page.waitForFunction(() => window.__GAME__.hasWon === true, { timeout: 15000 });
+        await expect(page.locator('#boss-panel')).not.toHaveClass(/visible/);
+
+        expect(errors).toEqual([]);
+    });
+
+    test('mobile HUD keeps objective and controls inside the viewport', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto('/');
+        await page.waitForFunction(() => {
+            return window.__GAME__ &&
+                window.__GAME__.isRunning &&
+                window.__GAME__.player;
+        }, { timeout: 30000 });
+
+        const layout = await page.evaluate(() => {
+            const box = (selector) => {
+                const rect = document.querySelector(selector).getBoundingClientRect();
+                return {
+                    left: rect.left,
+                    right: rect.right,
+                    top: rect.top,
+                    bottom: rect.bottom,
+                    width: rect.width,
+                    height: rect.height
+                };
+            };
+
+            return {
+                viewport: { width: window.innerWidth, height: window.innerHeight },
+                playerStats: box('.player-stats'),
+                gameInfo: box('.game-info'),
+                objective: document.querySelector('#objective-line').textContent,
+                abilityBar: box('#ability-bar'),
+                minimap: box('#minimap')
+            };
+        });
+
+        for (const key of ['playerStats', 'gameInfo', 'abilityBar', 'minimap']) {
+            expect(layout[key].left).toBeGreaterThanOrEqual(0);
+            expect(layout[key].right).toBeLessThanOrEqual(layout.viewport.width);
+        }
+
+        expect(layout.objective).toContain('Reach the forest shrine');
+        expect(layout.abilityBar.bottom).toBeLessThanOrEqual(layout.minimap.top);
+    });
 });

@@ -16,7 +16,10 @@ An advanced browser-based 3D action game featuring a ninja castle environment wi
   - Warrior - Tanky, high damage
   - Assassin - Fast, flanking attacks
   - Boss - Powerful with special abilities
-- **Wave System** - Progressive difficulty with scaling enemy counts
+- **Three-Level Campaign** - Moonlit Castle, Sunset Beach, and Storm Reef Showdown
+- **Objective Waypoints** - HUD objective text plus in-world markers for each campaign target
+- **Boss Battle UI** - Dedicated Storm Shogun health bar with attack telegraph warnings
+- **Checkpoint Restart** - Restart from the current level or reset the full campaign
 - **Visual Effects** - GPU particle systems, custom post-processing shaders (bloom, vignette, chromatic aberration)
 - **Procedural Audio** - Web Audio API generated sound effects
 - **Minimap** - Radar-style tactical display
@@ -61,14 +64,16 @@ npm run build
 
 ## Testing
 
-The game includes a comprehensive test suite with 164 tests covering:
+The game includes a comprehensive test suite covering:
 - Physics system (collision, raycasting)
 - Input handling
 - Wave spawning
+- Campaign objectives and checkpoints
 - Player mechanics
 - Combat system
 - AI behavior
 - Integration tests
+- Playwright browser tests for real-input campaign progression
 
 ```bash
 npm test              # Run all tests

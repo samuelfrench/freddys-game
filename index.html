@@ -195,6 +195,79 @@
             margin-top: 5px;
         }
 
+        .objective-line {
+            font-size: 0.86rem;
+            color: #ffcf8a;
+            opacity: 0.96;
+            margin-top: 8px;
+            max-width: 310px;
+            line-height: 1.25;
+        }
+
+        #boss-panel {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(420px, calc(100vw - 40px));
+            padding: 10px 14px 12px;
+            background: rgba(8, 12, 18, 0.58);
+            border: 1px solid rgba(255, 207, 138, 0.42);
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+            color: #fff;
+            text-align: center;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 101;
+            transition: opacity 0.2s ease;
+        }
+
+        #boss-panel.visible {
+            opacity: 1;
+        }
+
+        .boss-name {
+            font-size: 0.92rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #ffcf8a;
+            text-shadow: 0 0 14px rgba(255, 207, 138, 0.45);
+        }
+
+        .boss-health-bg {
+            height: 14px;
+            margin-top: 8px;
+            background: rgba(0,0,0,0.55);
+            border: 1px solid rgba(255,255,255,0.22);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .boss-health-fill {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #d92027, #ff7a3d, #ffcf8a);
+            box-shadow: 0 0 14px rgba(255, 122, 61, 0.5);
+            transition: width 0.18s ease;
+        }
+
+        .boss-health-value {
+            margin-top: 5px;
+            font-size: 0.78rem;
+            color: #f7f4e7;
+            opacity: 0.9;
+        }
+
+        .boss-telegraph-status {
+            min-height: 1em;
+            margin-top: 4px;
+            font-size: 0.78rem;
+            color: #ff7a3d;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
         #crosshair {
             position: fixed;
             top: 50%;
@@ -466,6 +539,116 @@
             z-index: 101;
             font-family: monospace;
         }
+
+        @media (max-width: 700px) {
+            #hud {
+                padding: 10px;
+            }
+
+            .hud-top {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+            }
+
+            .player-stats,
+            .game-info {
+                width: 100%;
+                min-width: 0;
+            }
+
+            .player-stats {
+                gap: 6px;
+                padding: 10px;
+            }
+
+            .stat-bar {
+                gap: 8px;
+            }
+
+            .stat-icon {
+                width: 24px;
+                height: 24px;
+                font-size: 1rem;
+            }
+
+            .stat-bar-bg {
+                width: auto;
+                flex: 1;
+                min-width: 120px;
+            }
+
+            .stat-value {
+                min-width: 56px;
+                font-size: 0.82rem;
+            }
+
+            .game-info {
+                text-align: left;
+                padding: 10px;
+            }
+
+            .score {
+                font-size: 1.35rem;
+            }
+
+            .wave-info,
+            .enemy-count,
+            .objective-line {
+                font-size: 0.82rem;
+            }
+
+            .objective-line {
+                max-width: none;
+            }
+
+            #boss-panel {
+                top: 190px;
+                width: calc(100vw - 20px);
+            }
+
+            #ability-bar {
+                bottom: 180px;
+                gap: 8px;
+            }
+
+            .ability-slot {
+                width: 52px;
+                height: 52px;
+            }
+
+            #minimap {
+                width: 112px;
+                height: 112px;
+                right: 14px;
+                bottom: 24px;
+            }
+
+            #controls-hint {
+                display: none;
+            }
+
+            #notification {
+                max-width: 80vw;
+                font-size: clamp(1.35rem, 8vw, 2rem);
+                line-height: 1.2;
+            }
+
+            #quality-toggle {
+                top: auto;
+                right: auto;
+                bottom: 24px;
+                left: 14px;
+                padding: 6px 10px;
+            }
+
+            #fps-counter {
+                top: auto;
+                right: auto;
+                bottom: 60px;
+                left: 14px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -502,8 +685,18 @@
                 <div class="score" id="score">Score: 0</div>
                 <div class="wave-info" id="wave-info">Wave 1</div>
                 <div class="enemy-count" id="enemy-count">Enemies: 0</div>
+                <div class="objective-line" id="objective-line">Objective: Reach the forest shrine</div>
             </div>
         </div>
+    </div>
+
+    <div id="boss-panel">
+        <div class="boss-name" id="boss-name">Storm Shogun</div>
+        <div class="boss-health-bg">
+            <div class="boss-health-fill" id="boss-health-bar"></div>
+        </div>
+        <div class="boss-health-value" id="boss-health-value">500/500</div>
+        <div class="boss-telegraph-status" id="boss-telegraph-status"></div>
     </div>
 
     <div id="crosshair">
@@ -560,7 +753,8 @@
     <div id="pause-menu">
         <div class="pause-title">PAUSED</div>
         <button class="menu-button" id="resume-btn">Resume</button>
-        <button class="menu-button" id="restart-btn">Restart</button>
+        <button class="menu-button" id="restart-btn">Restart Checkpoint</button>
+        <button class="menu-button" id="restart-campaign-btn">Restart Campaign</button>
     </div>
 
     <script type="module" src="/src/main.js"></script>

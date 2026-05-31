@@ -18,6 +18,7 @@ import { CompanionCat } from '../entities/CompanionCat.js';
 import { AllyNinja } from '../entities/AllyNinja.js';
 import { UIManager } from '../systems/UIManager.js';
 import { Minimap } from '../systems/Minimap.js';
+import { ObjectiveMarker } from '../systems/ObjectiveMarker.js';
 import { qualitySettings } from '../systems/QualitySettings.js';
 
 export class Game {
@@ -47,6 +48,7 @@ export class Game {
         this.levelSystem = new LevelSystem();
         this.uiManager = null;
         this.minimap = null;
+        this.objectiveMarker = null;
 
         // Game entities
         this.player = null;
@@ -63,6 +65,7 @@ export class Game {
         this.hasWon = false;
         this.bossBattleActive = false;
         this.pathSpawnCooldown = 0;
+        this.checkpointScore = 0;
     }
 
     async init() {
@@ -148,6 +151,10 @@ export class Game {
         // Initialize minimap
         this.minimap = new Minimap(this.player, this.aiSystem, this.castle);
 
+        // Initialize in-world objective waypoint
+        this.objectiveMarker = new ObjectiveMarker(this.scene);
+        this.refreshObjectiveMarker();
+
         // Setup event listeners
         this.setupEventListeners();
 
@@ -175,6 +182,10 @@ export class Game {
 
         document.getElementById('restart-btn').addEventListener('click', () => {
             this.restart();
+        });
+
+        document.getElementById('restart-campaign-btn')?.addEventListener('click', () => {
+            this.restartCampaign();
         });
 
         // Pause on escape
@@ -226,6 +237,7 @@ export class Game {
         setTimeout(() => {
             this.uiManager.showNotification(this.levelSystem.getCurrentLevel().subtitle);
         }, 900);
+        this.refreshObjectiveMarker();
 
         // Begin game loop
         this.gameLoop();
@@ -292,6 +304,13 @@ export class Game {
         // Update UI
         this.uiManager.update();
 
+        // Update objective waypoint after player/UI state has moved.
+        this.objectiveMarker?.update(
+            this.player.position,
+            this.elapsedTime,
+            this.getObjectiveStatus()
+        );
+
         // Update minimap
         this.minimap.update();
 
@@ -312,9 +331,12 @@ export class Game {
         const { level, levelNumber } = transition;
 
         this.wave = levelNumber;
+        this.checkpointScore = this.score;
         this.pathSpawnCooldown = 1.5;
         this.aiSystem.clearAllEnemies();
         this.applyLevelAtmosphere(level);
+        this.restorePlayerResources();
+        this.refreshObjectiveMarker();
 
         this.uiManager.showNotification(`Level ${levelNumber}: ${level.title}`);
         setTimeout(() => {
@@ -353,6 +375,32 @@ export class Game {
 
         this.uiManager.showNotification(`${level.boss.name} has arrived!`);
         this.audioSystem.playSound('bossSpawn', level.boss.position);
+        this.refreshObjectiveMarker();
+    }
+
+    getObjectiveStatus() {
+        if (!this.levelSystem || !this.player) return null;
+
+        const status = this.levelSystem.getCurrentObjectiveStatus(this.player.position);
+        if (!status) return null;
+
+        if (this.bossBattleActive && this.bossEnemy && this.bossEnemy.health > 0) {
+            status.label = `Defeat ${this.bossEnemy.name || 'Storm Shogun'}`;
+            status.position = this.bossEnemy.position.clone();
+            status.distance = Math.round(this.player.position.distanceTo(status.position));
+            status.isFinalObjective = true;
+        }
+
+        return status;
+    }
+
+    refreshObjectiveMarker() {
+        const status = this.getObjectiveStatus();
+        if (status) {
+            this.objectiveMarker?.setObjective(status);
+        } else {
+            this.objectiveMarker?.hide();
+        }
     }
 
     spawnAllies(count) {
@@ -395,6 +443,9 @@ export class Game {
     spawnPathEnemies() {
         // Spawn enemies based on player position (along the path to goal)
         // Instead of waves, enemies appear as you progress through each level.
+        if (this.hasWon || this.levelSystem.isCampaignComplete()) return;
+        if (this.bossBattleActive) return;
+
         this.pathSpawnCooldown = Math.max(0, this.pathSpawnCooldown - this.deltaTime);
         if (this.pathSpawnCooldown > 0) return;
 
@@ -430,6 +481,7 @@ export class Game {
 
         this.levelSystem.markBossDefeated();
         this.bossBattleActive = false;
+        this.objectiveMarker?.hide();
         this.victory('VICTORY! Storm Shogun defeated!');
     }
 
@@ -565,8 +617,46 @@ export class Game {
     }
 
     restart() {
+        this.restartFromCurrentLevel();
+    }
+
+    restartFromCurrentLevel() {
+        const level = this.levelSystem.getCurrentLevel();
+        const levelNumber = this.levelSystem.getLevelNumber();
+        const checkpoint = this.levelSystem.getCurrentCheckpointPosition();
+
+        this.score = this.checkpointScore;
+        this.hasWon = false;
+        this.wave = levelNumber;
+        this.bossEnemy = null;
+        this.bossBattleActive = false;
+        this.pathSpawnCooldown = 1;
+        this.levelSystem.bossDefeated = false;
+        if (level?.boss) {
+            this.levelSystem.bossEncounterStarted = false;
+        }
+        this.applyLevelAtmosphere(level);
+
+        this.resetPlayerAt(checkpoint);
+        this.companionCat.teleportToPlayer();
+        this.aiSystem.clearAllEnemies();
+        this.clearAllies();
+        this.clearTombstones();
+
+        if (level?.boss) {
+            this.startBossEncounter(level);
+        } else {
+            this.refreshObjectiveMarker();
+        }
+
+        this.uiManager.showNotification(`Restarted Level ${levelNumber}: ${level.title}`);
+        this.resume();
+    }
+
+    restartCampaign() {
         // Reset game state
         this.score = 0;
+        this.checkpointScore = 0;
         this.hasWon = false;
         this.wave = 1;
         this.bossEnemy = null;
@@ -588,16 +678,63 @@ export class Game {
         this.clearAllies();
 
         // Clear tombstones
+        this.clearTombstones();
+
+        // Show objective again
+        this.uiManager.showNotification('Level 1: Moonlit Castle');
+        this.refreshObjectiveMarker();
+
+        // Resume
+        this.resume();
+    }
+
+    resetPlayerAt(position) {
+        if (typeof this.player.reset === 'function') {
+            this.player.reset(position);
+        }
+
+        if (this.player.position?.copy) {
+            this.player.position.copy(position);
+        }
+        if (this.player.velocity?.set) {
+            this.player.velocity.set(0, 0, 0);
+        }
+        if (this.player.rotation?.set) {
+            this.player.rotation.set(0, 0, 0);
+        }
+        if (typeof this.player.maxHealth === 'number') {
+            this.player.health = this.player.maxHealth;
+        }
+        if (typeof this.player.maxStamina === 'number') {
+            this.player.stamina = this.player.maxStamina;
+        }
+        if (this.player.collider?.position?.copy) {
+            this.player.collider.position.copy(position);
+        }
+        if (this.camera?.position?.copy) {
+            this.camera.position.copy(position);
+        }
+    }
+
+    restorePlayerResources() {
+        if (typeof this.player.maxHealth === 'number') {
+            this.player.health = this.player.maxHealth;
+        }
+        if (typeof this.player.maxStamina === 'number') {
+            this.player.stamina = this.player.maxStamina;
+        }
+        if (this.player.abilities) {
+            for (const ability of Object.values(this.player.abilities)) {
+                ability.cooldown = 0;
+            }
+        }
+    }
+
+    clearTombstones() {
         for (const tombstone of this.tombstones) {
             this.scene.remove(tombstone);
         }
         this.tombstones = [];
-
-        // Show objective again
-        this.uiManager.showNotification('Level 1: Moonlit Castle');
-
-        // Resume
-        this.resume();
     }
 
     gameOver() {

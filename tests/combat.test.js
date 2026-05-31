@@ -197,6 +197,34 @@ describe('CombatSystem', () => {
 
             expect(results.playerDamage).toBe(0);
         });
+
+        it('should not damage player while a boss attack is telegraphing', () => {
+            mockEnemy.type = 'boss';
+            mockEnemy.telegraphActive = true;
+            mockEnemy.isAttacking = true;
+            mockEnemy.attackCooldown = 0.95;
+            mockEnemy.position.set(0, 1, -1);
+
+            const results = combatSystem.update(0.016);
+
+            expect(mockPlayer.takeDamage).not.toHaveBeenCalled();
+            expect(results.playerDamage).toBe(0);
+        });
+
+        it('should damage player once for a single active boss attack', () => {
+            mockEnemy.type = 'boss';
+            mockEnemy.telegraphActive = false;
+            mockEnemy.isAttacking = true;
+            mockEnemy.attackCooldown = 0.95;
+            mockEnemy.position.set(0, 1, -1);
+
+            const firstResults = combatSystem.update(0.016);
+            const secondResults = combatSystem.update(0.016);
+
+            expect(mockPlayer.takeDamage).toHaveBeenCalledTimes(1);
+            expect(firstResults.playerDamage).toBe(10);
+            expect(secondResults.playerDamage).toBe(0);
+        });
     });
 
     describe('processAbility', () => {

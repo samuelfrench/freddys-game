@@ -112,6 +112,39 @@ describe('AISystem', () => {
             expect(enemy1.stateTimer).toBeGreaterThan(0);
             expect(enemy2.stateTimer).toBeGreaterThan(0);
         });
+
+        it('should telegraph a boss attack before becoming active', () => {
+            const boss = aiSystem.spawnEnemy('boss', new THREE.Vector3(0, 1.7, 2));
+
+            const attacks = aiSystem.update(0.016, mockPlayer);
+
+            expect(attacks).toHaveLength(0);
+            expect(boss.telegraphActive).toBe(true);
+            expect(boss.telegraphTimer).toBeGreaterThan(0);
+            expect(boss.telegraphDuration).toBeGreaterThan(0);
+            expect(boss.telegraphTargetPosition.equals(mockPlayer.position)).toBe(true);
+            expect(boss.isAttacking).toBe(false);
+
+            aiSystem.update(boss.telegraphDuration, mockPlayer);
+
+            expect(boss.telegraphActive).toBe(false);
+            expect(boss.isAttacking).toBe(true);
+        });
+
+        it('should show and hide a visible boss telegraph marker', () => {
+            const boss = aiSystem.spawnEnemy('boss', new THREE.Vector3(0, 1.7, 2));
+
+            aiSystem.update(0.016, mockPlayer);
+
+            expect(boss.telegraphMesh).toBeDefined();
+            expect(boss.telegraphMesh.visible).toBe(true);
+            expect(boss.telegraphMesh.position.x).toBeCloseTo(mockPlayer.position.x);
+            expect(boss.telegraphMesh.position.z).toBeCloseTo(mockPlayer.position.z);
+
+            aiSystem.update(boss.telegraphDuration, mockPlayer);
+
+            expect(boss.telegraphMesh.visible).toBe(false);
+        });
     });
 
     describe('getEnemies', () => {

@@ -12,13 +12,15 @@ describe('LevelSystem', () => {
 
         expect(LEVELS[0]).toMatchObject({
             id: 'castle-forest',
-            title: 'Moonlit Castle'
+            title: 'Moonlit Castle',
+            objectiveLabel: 'Reach the forest shrine'
         });
 
         expect(LEVELS[1]).toMatchObject({
             id: 'sunset-beach',
             title: 'Sunset Beach',
-            theme: 'beach'
+            theme: 'beach',
+            objectiveLabel: 'Reach the reef gate'
         });
         expect(LEVELS[1].goalPosition.z).toBeLessThan(-280);
         expect(LEVELS[1].enemyTypes).toContain('warrior');
@@ -27,7 +29,8 @@ describe('LevelSystem', () => {
             id: 'storm-reef',
             title: 'Storm Reef Showdown',
             theme: 'boss',
-            teammateCount: 2
+            teammateCount: 2,
+            objectiveLabel: 'Defeat Storm Shogun'
         });
         expect(LEVELS[2].boss.type).toBe('boss');
     });
@@ -73,5 +76,33 @@ describe('LevelSystem', () => {
         levels.markBossDefeated();
 
         expect(levels.isCampaignComplete()).toBe(true);
+    });
+
+    it('reports objective status with distance and a cloned marker position', () => {
+        const levels = new LevelSystem();
+        levels.advanceIfGoalReached(new THREE.Vector3(0, 1, -160));
+
+        const status = levels.getCurrentObjectiveStatus(new THREE.Vector3(0, 1, -300));
+
+        expect(status).toMatchObject({
+            levelId: 'sunset-beach',
+            label: 'Reach the reef gate',
+            color: '#ffd38a',
+            distance: 18
+        });
+        expect(status.position.equals(LEVELS[1].goalPosition)).toBe(true);
+        expect(status.position).not.toBe(LEVELS[1].goalPosition);
+    });
+
+    it('returns a cloned checkpoint start position for the current level', () => {
+        const levels = new LevelSystem();
+        levels.advanceIfGoalReached(new THREE.Vector3(0, 1, -160));
+
+        const checkpoint = levels.getCurrentCheckpointPosition();
+
+        expect(checkpoint.z).toBeLessThan(-160);
+        expect(checkpoint.z).toBeGreaterThan(-220);
+        expect(checkpoint.y).toBeCloseTo(1.7);
+        expect(checkpoint).not.toBe(levels.getCurrentLevel().startPosition);
     });
 });
