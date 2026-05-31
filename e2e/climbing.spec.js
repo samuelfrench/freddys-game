@@ -51,7 +51,7 @@ test.describe('Climbing System E2E', () => {
         });
 
         // Record positions as we simulate walking toward tower
-        const positions = await page.evaluate(async () => {
+        const positions = await page.evaluate(() => {
             const game = window.__GAME__;
             const positions = [];
 
@@ -67,9 +67,6 @@ test.describe('Climbing System E2E', () => {
                 // Simulate forward movement
                 game.player.velocity.z = -8; // Walk forward
                 game.player.update(0.016); // ~60fps
-
-                // Small delay
-                await new Promise(r => setTimeout(r, 16));
             }
 
             return positions;
@@ -100,7 +97,7 @@ test.describe('Climbing System E2E', () => {
         });
 
         // Walk toward the tower, recording Y positions
-        const climbData = await page.evaluate(async () => {
+        const climbData = await page.evaluate(() => {
             const game = window.__GAME__;
             const data = {
                 positions: [],
@@ -126,8 +123,6 @@ test.describe('Climbing System E2E', () => {
                 if (yDelta > data.maxYJump) {
                     data.maxYJump = yDelta;
                 }
-
-                await new Promise(r => setTimeout(r, 16));
             }
 
             return data;
@@ -152,7 +147,7 @@ test.describe('Climbing System E2E', () => {
         });
 
         // Try to walk into the tower
-        const result = await page.evaluate(async () => {
+        const result = await page.evaluate(() => {
             const game = window.__GAME__;
             const startY = game.player.position.y;
 
@@ -161,7 +156,6 @@ test.describe('Climbing System E2E', () => {
                 game.player.velocity.x = -8;
                 game.player.velocity.z = 0;
                 game.player.update(0.016);
-                await new Promise(r => setTimeout(r, 16));
             }
 
             return {
@@ -181,19 +175,19 @@ test.describe('Climbing System E2E', () => {
         const result = await page.evaluate(() => {
             const game = window.__GAME__;
             const physics = game.physicsSystem;
-            const THREE = window.THREE || game.player.position.constructor;
+            const Vector3 = game.player.position.constructor;
 
             // Test from ground level - should not return high surfaces
             const groundPos = { x: 0, y: 1.7, z: 0 };
             const groundHeight = physics.getGroundHeight(
-                new THREE.Vector3(groundPos.x, groundPos.y, groundPos.z),
+                new Vector3(groundPos.x, groundPos.y, groundPos.z),
                 groundPos.y
             );
 
             // Test from elevated position - should return surfaces near current height
             const elevatedPos = { x: 0, y: 10, z: 0 };
             const elevatedHeight = physics.getGroundHeight(
-                new THREE.Vector3(elevatedPos.x, elevatedPos.y, elevatedPos.z),
+                new Vector3(elevatedPos.x, elevatedPos.y, elevatedPos.z),
                 elevatedPos.y
             );
 
@@ -214,17 +208,17 @@ test.describe('Climbing System E2E', () => {
         const result = await page.evaluate(() => {
             const game = window.__GAME__;
             const physics = game.physicsSystem;
-            const THREE = window.THREE || game.player.position.constructor;
+            const Vector3 = game.player.position.constructor;
 
             // Create a test platform at step height
             const testPlatform = {
                 type: 'box',
-                position: new THREE.Vector3(100, 0.5, 100), // Away from game geometry
-                size: new THREE.Vector3(4, 0.3, 4)
+                position: new Vector3(100, 0.5, 100), // Away from game geometry
+                size: new Vector3(4, 0.3, 4)
             };
 
             // Test collision from player approaching platform
-            const playerPos = new THREE.Vector3(100, 1.7, 100);
+            const playerPos = new Vector3(100, 1.7, 100);
             const collider = { radius: 0.4, height: 1.7 };
 
             // This should NOT collide (platform is step-able)

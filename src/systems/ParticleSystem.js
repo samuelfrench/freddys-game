@@ -50,7 +50,7 @@ class ParticleEmitter {
         const sizes = new Float32Array(this.config.maxParticles);
 
         this.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        this.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 4));
+        this.geometry.setAttribute('particleColor', new THREE.BufferAttribute(colors, 4));
         this.geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
 
         // Custom shader material for better particle rendering
@@ -60,11 +60,11 @@ class ParticleEmitter {
             },
             vertexShader: `
                 attribute float size;
-                attribute vec4 color;
+                attribute vec4 particleColor;
                 varying vec4 vColor;
 
                 void main() {
-                    vColor = color;
+                    vColor = particleColor;
                     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
                     gl_PointSize = size * (300.0 / -mvPosition.z);
                     gl_Position = projectionMatrix * mvPosition;
@@ -146,7 +146,7 @@ class ParticleEmitter {
 
     update(deltaTime) {
         const positions = this.geometry.attributes.position.array;
-        const colors = this.geometry.attributes.color.array;
+        const colors = this.geometry.attributes.particleColor.array;
         const sizes = this.geometry.attributes.size.array;
 
         let aliveCount = 0;
@@ -197,7 +197,7 @@ class ParticleEmitter {
         }
 
         this.geometry.attributes.position.needsUpdate = true;
-        this.geometry.attributes.color.needsUpdate = true;
+        this.geometry.attributes.particleColor.needsUpdate = true;
         this.geometry.attributes.size.needsUpdate = true;
 
         // Set draw range

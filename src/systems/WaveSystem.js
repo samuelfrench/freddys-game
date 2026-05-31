@@ -15,9 +15,9 @@ export class WaveSystem {
         this.waveActive = false;
 
         // Wave configuration
-        this.baseEnemyCount = 3;
-        this.enemyScaling = 1;
-        this.spawnDelay = 2.0;
+        this.baseEnemyCount = 5;
+        this.enemyScaling = 2;
+        this.spawnDelay = 1.5;
         this.waveDelay = 5;
     }
 

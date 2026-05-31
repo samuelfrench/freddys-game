@@ -81,10 +81,26 @@ export class UIManager {
     }
 
     updateWaveInfo() {
-        this.waveInfo.textContent = `Wave ${this.game.wave}`;
+        const levelNumber = this.game.levelSystem?.getLevelNumber?.() || this.game.wave;
+        const levelTitle = this.game.levelSystem?.getCurrentLevel?.()?.title;
+        this.waveInfo.textContent = levelTitle
+            ? `Level ${levelNumber}: ${levelTitle}`
+            : `Wave ${this.game.wave}`;
 
         const enemyRemaining = this.game.waveSystem.getEnemiesRemaining();
-        this.enemyCount.textContent = `Enemies: ${enemyRemaining}`;
+        const details = [`Enemies: ${enemyRemaining}`];
+
+        if (this.game.allies?.length) {
+            details.push(`Team: ${this.game.allies.length}`);
+        }
+
+        if (this.game.bossEnemy) {
+            const bossMaxHealth = this.game.bossEnemy.maxHealth || this.game.bossEnemy.health || 1;
+            const bossPercent = Math.max(0, Math.ceil((this.game.bossEnemy.health / bossMaxHealth) * 100));
+            details.push(`Boss: ${bossPercent}%`);
+        }
+
+        this.enemyCount.textContent = details.join(' | ');
     }
 
     updateAbilities() {

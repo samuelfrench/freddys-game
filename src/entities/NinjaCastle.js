@@ -14,6 +14,7 @@ export class NinjaCastle {
         this.lights = [];
         this.torches = [];
         this.animatedObjects = [];
+        this.levelLandmarks = [];
 
         // Performance: Track meshes for frustum culling
         this.culledMeshes = [];
@@ -56,6 +57,10 @@ export class NinjaCastle {
 
         // Create forest area
         this.createForest();
+
+        // Create the added campaign levels beyond the shrine
+        this.createBeachLevel();
+        this.createStormReefArena();
 
         // Setup lighting
         this.createLighting();
@@ -132,6 +137,38 @@ export class NinjaCastle {
             metalness: 0.5,
             transparent: true,
             opacity: 0.8
+        });
+
+        this.sandMaterial = new THREE.MeshStandardMaterial({
+            color: 0xdcb66f,
+            roughness: 0.98,
+            metalness: 0.0
+        });
+
+        this.beachFoamMaterial = new THREE.MeshStandardMaterial({
+            color: 0xf6f2dc,
+            roughness: 0.7,
+            transparent: true,
+            opacity: 0.82
+        });
+
+        this.palmLeafMaterial = new THREE.MeshStandardMaterial({
+            color: 0x2f8a45,
+            roughness: 0.82
+        });
+
+        this.reefStoneMaterial = new THREE.MeshStandardMaterial({
+            color: 0x26384c,
+            roughness: 0.9,
+            metalness: 0.05
+        });
+
+        this.stormCrystalMaterial = new THREE.MeshStandardMaterial({
+            color: 0x80d9ff,
+            emissive: 0x1f7fff,
+            emissiveIntensity: 1.4,
+            roughness: 0.18,
+            metalness: 0.35
         });
     }
 
@@ -1328,6 +1365,282 @@ export class NinjaCastle {
         return lantern;
     }
 
+    createBeachLevel() {
+        const beachGroup = new THREE.Group();
+
+        const sandGeometry = new THREE.PlaneGeometry(110, 165, 18, 24);
+        const sand = new THREE.Mesh(sandGeometry, this.sandMaterial);
+        sand.rotation.x = -Math.PI / 2;
+        sand.position.set(8, 0.005, -250);
+        sand.receiveShadow = true;
+        beachGroup.add(sand);
+
+        this.physicsSystem.addStaticBody({
+            type: 'box',
+            position: new THREE.Vector3(8, -0.1, -250),
+            size: new THREE.Vector3(110, 0.2, 165)
+        });
+
+        const oceanGeometry = new THREE.PlaneGeometry(58, 170, 16, 18);
+        const ocean = new THREE.Mesh(oceanGeometry, this.waterMaterial);
+        ocean.rotation.x = -Math.PI / 2;
+        ocean.position.set(-42, 0.02, -250);
+        ocean.receiveShadow = true;
+        beachGroup.add(ocean);
+        this.animatedObjects.push({ mesh: ocean, type: 'water' });
+
+        for (let i = 0; i < 7; i++) {
+            const wave = new THREE.Mesh(
+                new THREE.PlaneGeometry(46, 1.2, 8, 1),
+                this.beachFoamMaterial.clone()
+            );
+            wave.rotation.x = -Math.PI / 2;
+            wave.position.set(-16 + Math.sin(i) * 2, 0.04, -190 - i * 20);
+            wave.rotation.z = Math.sin(i * 1.7) * 0.15;
+            beachGroup.add(wave);
+            this.animatedObjects.push({
+                mesh: wave,
+                type: 'beachWave',
+                baseX: wave.position.x,
+                baseZ: wave.position.z,
+                phase: i * 0.7
+            });
+        }
+
+        this.createBeachBoardwalk(beachGroup);
+        this.createTidePools(beachGroup);
+
+        const palmPositions = [
+            [-31, -185, 1.1], [31, -192, 1.0], [-35, -215, 1.25], [34, -224, 0.95],
+            [-29, -248, 1.15], [32, -260, 1.3], [-34, -286, 1.0], [30, -302, 1.1]
+        ];
+        for (const [x, z, scale] of palmPositions) {
+            beachGroup.add(this.createPalmTree(x, z, scale));
+        }
+
+        const gate = this.createBeachGate();
+        gate.position.set(0, 0, -318);
+        beachGroup.add(gate);
+
+        this.createShellTrail(beachGroup);
+
+        const beachLight = new THREE.PointLight(0xffb36a, 2.2, 55);
+        beachLight.position.set(0, 12, -245);
+        beachGroup.add(beachLight);
+        this.lights.push(beachLight);
+
+        this.levelLandmarks.push({
+            id: 'sunset-beach',
+            position: new THREE.Vector3(0, 1, -318)
+        });
+
+        this.castle.add(beachGroup);
+        this.bounds.minZ = Math.min(this.bounds.minZ, -335);
+    }
+
+    createBeachBoardwalk(parent) {
+        const plankMaterial = new THREE.MeshStandardMaterial({
+            color: 0x8b6a42,
+            roughness: 0.92
+        });
+        const railMaterial = new THREE.MeshStandardMaterial({
+            color: 0x5d4329,
+            roughness: 0.9
+        });
+
+        for (let z = -178; z >= -320; z -= 4) {
+            const plank = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.18, 1.6), plankMaterial);
+            plank.position.set(Math.sin(z * 0.05) * 1.4, 0.18, z);
+            plank.rotation.y = Math.sin(z * 0.08) * 0.04;
+            plank.receiveShadow = true;
+            parent.add(plank);
+
+            for (const side of [-1, 1]) {
+                const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 1.1, 8), railMaterial);
+                post.position.set(plank.position.x + side * 4.2, 0.65, z);
+                post.castShadow = true;
+                parent.add(post);
+            }
+        }
+    }
+
+    createTidePools(parent) {
+        const poolMaterial = new THREE.MeshStandardMaterial({
+            color: 0x2aa6b8,
+            emissive: 0x06485d,
+            emissiveIntensity: 0.12,
+            roughness: 0.2,
+            metalness: 0.2,
+            transparent: true,
+            opacity: 0.78
+        });
+
+        const pools = [
+            [19, -205, 4.5, 2.5], [24, -246, 5.2, 3.2], [-23, -276, 3.8, 2.2]
+        ];
+        for (const [x, z, sx, sz] of pools) {
+            const pool = new THREE.Mesh(new THREE.CircleGeometry(1, 28), poolMaterial.clone());
+            pool.scale.set(sx, sz, 1);
+            pool.rotation.x = -Math.PI / 2;
+            pool.position.set(x, 0.045, z);
+            parent.add(pool);
+            this.animatedObjects.push({ mesh: pool, type: 'water' });
+
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.06, 8, 28), this.stoneMaterial);
+            ring.scale.set(sx, sz, 1);
+            ring.rotation.x = Math.PI / 2;
+            ring.position.set(x, 0.08, z);
+            parent.add(ring);
+        }
+    }
+
+    createPalmTree(x, z, scale) {
+        const palm = new THREE.Group();
+        palm.position.set(x, 0, z);
+
+        const trunk = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.22 * scale, 0.36 * scale, 5.2 * scale, 9),
+            this.darkWoodMaterial
+        );
+        trunk.position.y = 2.6 * scale;
+        trunk.rotation.z = (x < 0 ? -0.12 : 0.12);
+        trunk.castShadow = true;
+        palm.add(trunk);
+
+        for (let i = 0; i < 7; i++) {
+            const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.38 * scale, 3.3 * scale, 6), this.palmLeafMaterial);
+            const angle = (i / 7) * Math.PI * 2;
+            leaf.position.set(Math.cos(angle) * 0.8 * scale, 5.25 * scale, Math.sin(angle) * 0.8 * scale);
+            leaf.rotation.z = Math.PI / 2;
+            leaf.rotation.y = -angle;
+            leaf.castShadow = true;
+            palm.add(leaf);
+        }
+
+        return palm;
+    }
+
+    createBeachGate() {
+        const gate = new THREE.Group();
+        const coralMaterial = new THREE.MeshStandardMaterial({
+            color: 0xff7f73,
+            roughness: 0.75,
+            emissive: 0x441a18,
+            emissiveIntensity: 0.15
+        });
+
+        const postGeometry = new THREE.BoxGeometry(0.8, 6, 0.8);
+        for (const x of [-4.5, 4.5]) {
+            const post = new THREE.Mesh(postGeometry, coralMaterial);
+            post.position.set(x, 3, 0);
+            post.castShadow = true;
+            gate.add(post);
+        }
+
+        const beam = new THREE.Mesh(new THREE.BoxGeometry(11, 0.8, 1), coralMaterial);
+        beam.position.y = 6;
+        beam.castShadow = true;
+        gate.add(beam);
+
+        const orb = new THREE.Mesh(new THREE.OctahedronGeometry(0.75), this.stormCrystalMaterial);
+        orb.position.y = 4.2;
+        gate.add(orb);
+        this.animatedObjects.push({ mesh: orb, type: 'artifact', baseY: 4.2 });
+
+        return gate;
+    }
+
+    createShellTrail(parent) {
+        const shellMaterial = new THREE.MeshStandardMaterial({
+            color: 0xf3d7b1,
+            roughness: 0.68
+        });
+
+        for (let i = 0; i < 34; i++) {
+            const shell = new THREE.Mesh(new THREE.SphereGeometry(0.12 + (i % 3) * 0.025, 8, 5), shellMaterial);
+            shell.position.set(Math.sin(i * 1.3) * 4.2, 0.12, -180 - i * 4.1);
+            shell.scale.y = 0.35;
+            shell.rotation.y = i * 0.8;
+            parent.add(shell);
+        }
+    }
+
+    createStormReefArena() {
+        const arenaGroup = new THREE.Group();
+
+        const arenaFloor = new THREE.Mesh(
+            new THREE.CylinderGeometry(34, 39, 1.1, 18),
+            this.reefStoneMaterial
+        );
+        arenaFloor.position.set(0, 0.45, -424);
+        arenaFloor.receiveShadow = true;
+        arenaGroup.add(arenaFloor);
+
+        this.physicsSystem.addStaticBody({
+            type: 'box',
+            position: new THREE.Vector3(0, 0.45, -424),
+            size: new THREE.Vector3(72, 1.1, 72)
+        });
+
+        const moat = new THREE.Mesh(new THREE.TorusGeometry(41, 2.3, 8, 48), this.waterMaterial);
+        moat.position.set(0, 0.2, -424);
+        moat.rotation.x = Math.PI / 2;
+        arenaGroup.add(moat);
+        this.animatedObjects.push({ mesh: moat, type: 'water' });
+
+        for (let i = 0; i < 10; i++) {
+            const angle = (i / 10) * Math.PI * 2;
+            const x = Math.cos(angle) * 30;
+            const z = -424 + Math.sin(angle) * 30;
+            const obelisk = this.createArenaObelisk(2.4 + (i % 3) * 0.35);
+            obelisk.position.set(x, 0.5, z);
+            obelisk.rotation.y = -angle;
+            arenaGroup.add(obelisk);
+        }
+
+        const dais = new THREE.Mesh(new THREE.CylinderGeometry(8, 11, 1.4, 10), this.stoneMaterial);
+        dais.position.set(0, 1.2, -424);
+        dais.receiveShadow = true;
+        arenaGroup.add(dais);
+
+        const stormCore = new THREE.Mesh(new THREE.IcosahedronGeometry(2.2, 0), this.stormCrystalMaterial);
+        stormCore.position.set(0, 8.5, -424);
+        arenaGroup.add(stormCore);
+        this.animatedObjects.push({ mesh: stormCore, type: 'stormCore', baseY: 8.5 });
+
+        const stormLight = new THREE.PointLight(0x74c7ff, 4.5, 95);
+        stormLight.position.set(0, 13, -424);
+        arenaGroup.add(stormLight);
+        this.lights.push(stormLight);
+
+        this.levelLandmarks.push({
+            id: 'storm-reef',
+            position: new THREE.Vector3(0, 1, -424)
+        });
+
+        this.castle.add(arenaGroup);
+        this.bounds.minZ = Math.min(this.bounds.minZ, -470);
+    }
+
+    createArenaObelisk(scale) {
+        const obelisk = new THREE.Group();
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(1.1 * scale, 1.4 * scale, 0.6, 6), this.reefStoneMaterial);
+        base.position.y = 0.3;
+        obelisk.add(base);
+
+        const shard = new THREE.Mesh(new THREE.ConeGeometry(0.65 * scale, 5.5 * scale, 5), this.stormCrystalMaterial);
+        shard.position.y = 3.2 * scale;
+        shard.castShadow = true;
+        obelisk.add(shard);
+
+        const light = new THREE.PointLight(0x68caff, 0.8, 16);
+        light.position.y = 3.8 * scale;
+        obelisk.add(light);
+        this.lights.push(light);
+
+        return obelisk;
+    }
+
     addTorch(parent, x, y, z) {
         const group = new THREE.Group();
         group.position.set(x, y, z);
@@ -1426,7 +1739,17 @@ export class NinjaCastle {
             new THREE.Vector3(-20, 3, -35),
             new THREE.Vector3(20, 3, -35),
             new THREE.Vector3(-35, 3, -20),
-            new THREE.Vector3(35, 3, -20)
+            new THREE.Vector3(35, 3, -20),
+            // Beach level spawn points
+            new THREE.Vector3(-28, 0, -205),
+            new THREE.Vector3(28, 0, -215),
+            new THREE.Vector3(-24, 0, -260),
+            new THREE.Vector3(26, 0, -290),
+            // Final storm reef spawn points
+            new THREE.Vector3(-28, 1.1, -402),
+            new THREE.Vector3(28, 1.1, -402),
+            new THREE.Vector3(-22, 1.1, -445),
+            new THREE.Vector3(22, 1.1, -445)
         ];
 
         this.spawnPoints = spawnLocations;
@@ -1531,6 +1854,14 @@ export class NinjaCastle {
                 // Artifact rotates and bobs
                 obj.mesh.rotation.y = elapsedTime * 0.5;
                 obj.mesh.position.y = obj.baseY + Math.sin(elapsedTime * 1.5) * 0.2;
+            } else if (obj.type === 'beachWave') {
+                obj.mesh.position.x = obj.baseX + Math.sin(elapsedTime * 1.6 + obj.phase) * 1.2;
+                obj.mesh.position.z = obj.baseZ + Math.cos(elapsedTime * 1.2 + obj.phase) * 0.5;
+                obj.mesh.material.opacity = 0.55 + Math.sin(elapsedTime * 2.2 + obj.phase) * 0.22;
+            } else if (obj.type === 'stormCore') {
+                obj.mesh.rotation.x = elapsedTime * 0.35;
+                obj.mesh.rotation.y = elapsedTime * 0.7;
+                obj.mesh.position.y = obj.baseY + Math.sin(elapsedTime * 2.4) * 0.35;
             }
         }
 

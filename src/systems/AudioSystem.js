@@ -54,6 +54,9 @@ export class AudioSystem {
         // Wave start
         this.sounds.set('waveStart', () => this.createWaveStartSound());
 
+        // Final boss arrival
+        this.sounds.set('bossSpawn', () => this.createBossSpawnSound());
+
         // Footstep
         this.sounds.set('footstep', () => this.createFootstepSound());
     }
@@ -175,6 +178,39 @@ export class AudioSystem {
 
             oscillators.push(osc);
         }
+    }
+
+    createBossSpawnSound() {
+        // Deep storm horn with a bright crackle on top.
+        const now = this.context.currentTime;
+        const notes = [55, 82.5, 110];
+
+        for (let i = 0; i < notes.length; i++) {
+            const osc = this.context.createOscillator();
+            const gain = this.context.createGain();
+            const filter = this.context.createBiquadFilter();
+
+            osc.type = i === 0 ? 'sawtooth' : 'triangle';
+            osc.frequency.setValueAtTime(notes[i], now);
+            osc.frequency.exponentialRampToValueAtTime(notes[i] * 0.65, now + 1.1);
+
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(900 - i * 180, now);
+
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.linearRampToValueAtTime(0.24 / (i + 1), now + 0.12);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 1.25);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.masterGain);
+
+            osc.start(now);
+            osc.stop(now + 1.25);
+        }
+
+        this.addNoiseBurst(0.22, 0.35, 750);
+        this.addNoiseBurst(0.08, 0.18, 2600);
     }
 
     createFootstepSound() {

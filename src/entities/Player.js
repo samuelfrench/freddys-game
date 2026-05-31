@@ -30,8 +30,8 @@ export class Player {
         this.isAttacking = false;
 
         // Stats
-        this.maxHealth = 200;
-        this.health = 200;
+        this.maxHealth = 100;
+        this.health = 100;
         this.maxStamina = 100;
         this.stamina = 100;
         this.staminaRegen = 30;

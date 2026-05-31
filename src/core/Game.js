@@ -11,9 +11,11 @@ import { CombatSystem } from '../systems/CombatSystem.js';
 import { ParticleSystem } from '../systems/ParticleSystem.js';
 import { AudioSystem } from '../systems/AudioSystem.js';
 import { WaveSystem } from '../systems/WaveSystem.js';
+import { LevelSystem } from '../systems/LevelSystem.js';
 import { Player } from '../entities/Player.js';
 import { NinjaCastle } from '../entities/NinjaCastle.js';
 import { CompanionCat } from '../entities/CompanionCat.js';
+import { AllyNinja } from '../entities/AllyNinja.js';
 import { UIManager } from '../systems/UIManager.js';
 import { Minimap } from '../systems/Minimap.js';
 import { qualitySettings } from '../systems/QualitySettings.js';
@@ -42,6 +44,7 @@ export class Game {
         this.particleSystem = null;
         this.audioSystem = null;
         this.waveSystem = null;
+        this.levelSystem = new LevelSystem();
         this.uiManager = null;
         this.minimap = null;
 
@@ -49,6 +52,8 @@ export class Game {
         this.player = null;
         this.castle = null;
         this.companionCat = null;
+        this.allies = [];
+        this.bossEnemy = null;
         this.enemies = [];
         this.tombstones = [];
 
@@ -56,6 +61,8 @@ export class Game {
         this.score = 0;
         this.wave = 1;
         this.hasWon = false;
+        this.bossBattleActive = false;
+        this.pathSpawnCooldown = 0;
     }
 
     async init() {
@@ -215,7 +222,10 @@ export class Game {
         this.audioSystem.playAmbient();
 
         // Show objective
-        this.uiManager.showNotification('Reach the shrine in the forest!');
+        this.uiManager.showNotification('Level 1: Moonlit Castle');
+        setTimeout(() => {
+            this.uiManager.showNotification(this.levelSystem.getCurrentLevel().subtitle);
+        }, 900);
 
         // Begin game loop
         this.gameLoop();
@@ -255,6 +265,11 @@ export class Game {
         // Update companion cat
         this.companionCat.update(this.deltaTime);
 
+        // Update final-level teammates
+        for (const ally of this.allies) {
+            ally.update(this.deltaTime);
+        }
+
         // Update physics
         this.physicsSystem.update(this.deltaTime);
 
@@ -287,47 +302,140 @@ export class Game {
     checkGoal() {
         if (this.hasWon) return;
 
-        // Check if player reached the shrine (goal position)
-        const goalPos = this.castle.goalPosition;
-        if (goalPos) {
-            const distance = this.player.position.distanceTo(goalPos);
-            if (distance < 5) {
-                this.victory();
-            }
+        const transition = this.levelSystem.advanceIfGoalReached(this.player.position);
+        if (transition) {
+            this.handleLevelTransition(transition);
+        }
+    }
+
+    handleLevelTransition(transition) {
+        const { level, levelNumber } = transition;
+
+        this.wave = levelNumber;
+        this.pathSpawnCooldown = 1.5;
+        this.aiSystem.clearAllEnemies();
+        this.applyLevelAtmosphere(level);
+
+        this.uiManager.showNotification(`Level ${levelNumber}: ${level.title}`);
+        setTimeout(() => {
+            this.uiManager.showNotification(level.subtitle);
+        }, 900);
+
+        if (this.levelSystem.shouldStartBossEncounter()) {
+            this.startBossEncounter(level);
+        }
+    }
+
+    applyLevelAtmosphere(level) {
+        if (!this.scene) return;
+
+        if (level.theme === 'beach') {
+            this.scene.background = new THREE.Color(0xf2a36b);
+            this.scene.fog = new THREE.FogExp2(0xf2a36b, 0.002);
+        } else if (level.theme === 'boss') {
+            this.scene.background = new THREE.Color(0x1c2942);
+            this.scene.fog = new THREE.FogExp2(0x1c2942, 0.0035);
+        } else {
+            this.scene.background = new THREE.Color(0x4a4a6a);
+            this.scene.fog = new THREE.FogExp2(0x4a4a6a, 0.003);
+        }
+    }
+
+    startBossEncounter(level) {
+        this.levelSystem.markBossEncounterStarted();
+        this.bossBattleActive = true;
+        this.clearAllies();
+        this.spawnAllies(level.teammateCount || 2);
+
+        this.bossEnemy = this.aiSystem.spawnEnemy(level.boss.type, level.boss.position.clone());
+        this.bossEnemy.name = level.boss.name;
+        this.bossEnemy.points = 2500;
+
+        this.uiManager.showNotification(`${level.boss.name} has arrived!`);
+        this.audioSystem.playSound('bossSpawn', level.boss.position);
+    }
+
+    spawnAllies(count) {
+        const allyConfigs = [
+            { name: 'Mika', sideOffset: -3.4, color: 0x2c8dff },
+            { name: 'Ryo', sideOffset: 3.4, color: 0x12c7a3 }
+        ];
+
+        for (let i = 0; i < count; i++) {
+            const config = allyConfigs[i % allyConfigs.length];
+            const ally = new AllyNinja(this.scene, this.player, this.aiSystem, {
+                ...config,
+                onEnemyDefeated: (enemy, source) => this.handleAllyEnemyDefeated(enemy, source)
+            });
+            this.allies.push(ally);
+        }
+    }
+
+    clearAllies() {
+        for (const ally of this.allies) {
+            ally.destroy();
+        }
+        this.allies = [];
+    }
+
+    handleAllyEnemyDefeated(enemy) {
+        if (!this.aiSystem.getEnemies().includes(enemy)) return;
+
+        this.score += enemy.points;
+        this.particleSystem.createDeathEffect(enemy.position);
+        this.audioSystem.playSound('enemyDeath', enemy.position);
+        this.createTombstone(enemy.position, enemy.type);
+        this.aiSystem.removeEnemy(enemy);
+
+        if (enemy === this.bossEnemy || (this.bossBattleActive && enemy.type === 'boss')) {
+            this.completeBossVictory();
         }
     }
 
     spawnPathEnemies() {
         // Spawn enemies based on player position (along the path to goal)
-        // Instead of waves, enemies appear as you progress
+        // Instead of waves, enemies appear as you progress through each level.
+        this.pathSpawnCooldown = Math.max(0, this.pathSpawnCooldown - this.deltaTime);
+        if (this.pathSpawnCooldown > 0) return;
+
+        const level = this.levelSystem.getCurrentLevel();
         const playerZ = this.player.position.z;
-        const activeEnemies = this.aiSystem.getEnemies().length;
+        const activeEnemies = this.aiSystem.getEnemies()
+            .filter((enemy) => enemy !== this.bossEnemy)
+            .length;
 
         // Only spawn if few enemies and player is progressing
-        if (activeEnemies < 3 && playerZ < -40) {
-            // Spawn enemies ahead of player in the forest
-            const spawnZ = playerZ - 15 - Math.random() * 10;
-            if (spawnZ > -150) { // Don't spawn past the shrine
-                const spawnX = (Math.random() - 0.5) * 20;
-                const spawnPos = new THREE.Vector3(spawnX, 0, spawnZ);
+        if (
+            activeEnemies < level.maxEnemies &&
+            playerZ < level.spawnStartZ &&
+            playerZ > level.spawnEndZ
+        ) {
+            const rawSpawnZ = playerZ - level.spawnLeadDistance - Math.random() * 10;
+            const spawnZ = Math.max(rawSpawnZ, level.spawnEndZ + 10);
+            const spawnX = (Math.random() - 0.5) * level.spawnSpread;
+            const spawnPos = new THREE.Vector3(spawnX, level.spawnY || 0, spawnZ);
 
-                // Random enemy type based on depth
-                let type = 'grunt';
-                if (playerZ < -80) {
-                    type = Math.random() < 0.3 ? 'warrior' : 'grunt';
-                }
-                if (playerZ < -120) {
-                    type = Math.random() < 0.2 ? 'assassin' : (Math.random() < 0.4 ? 'warrior' : 'grunt');
-                }
-
-                this.aiSystem.spawnEnemy(type, spawnPos);
-            }
+            this.aiSystem.spawnEnemy(this.pickLevelEnemyType(level), spawnPos);
+            this.pathSpawnCooldown = level.theme === 'boss' ? 2.2 : 1.6;
         }
     }
 
-    victory() {
+    pickLevelEnemyType(level) {
+        const types = level.enemyTypes || ['grunt'];
+        return types[Math.floor(Math.random() * types.length)];
+    }
+
+    completeBossVictory() {
+        if (this.hasWon) return;
+
+        this.levelSystem.markBossDefeated();
+        this.bossBattleActive = false;
+        this.victory('VICTORY! Storm Shogun defeated!');
+    }
+
+    victory(message = 'VICTORY! You reached the shrine!') {
         this.hasWon = true;
-        this.uiManager.showNotification('VICTORY! You reached the shrine!');
+        this.uiManager.showNotification(message);
         this.audioSystem.playSound('victory');
 
         // Celebration pause
@@ -343,6 +451,10 @@ export class Game {
             this.particleSystem.createDeathEffect(death.position);
             this.audioSystem.playSound('enemyDeath', death.position);
             this.createTombstone(death.position, death.enemy.type);
+
+            if (death.enemy === this.bossEnemy || (this.bossBattleActive && death.enemy.type === 'boss')) {
+                this.completeBossVictory();
+            }
         }
 
         // Handle player damage
@@ -456,6 +568,12 @@ export class Game {
         // Reset game state
         this.score = 0;
         this.hasWon = false;
+        this.wave = 1;
+        this.bossEnemy = null;
+        this.bossBattleActive = false;
+        this.pathSpawnCooldown = 0;
+        this.levelSystem.reset();
+        this.applyLevelAtmosphere(this.levelSystem.getCurrentLevel());
 
         // Reset player
         this.player.reset();
@@ -466,6 +584,9 @@ export class Game {
         // Clear enemies
         this.aiSystem.clearAllEnemies();
 
+        // Clear allies
+        this.clearAllies();
+
         // Clear tombstones
         for (const tombstone of this.tombstones) {
             this.scene.remove(tombstone);
@@ -473,7 +594,7 @@ export class Game {
         this.tombstones = [];
 
         // Show objective again
-        this.uiManager.showNotification('Reach the shrine in the forest!');
+        this.uiManager.showNotification('Level 1: Moonlit Castle');
 
         // Resume
         this.resume();

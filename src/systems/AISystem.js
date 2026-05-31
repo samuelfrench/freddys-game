@@ -113,34 +113,34 @@ class Enemy {
     setupStats() {
         switch (this.type) {
             case 'grunt':
-                this.maxHealth = 25;
-                this.health = 25;
-                this.speed = 3;
-                this.attackDamage = 5;
+                this.maxHealth = 50;
+                this.health = 50;
+                this.speed = 4;
+                this.attackDamage = 10;
                 this.attackRange = 2;
-                this.attackSpeed = 0.7;
+                this.attackSpeed = 1.0;
                 this.detectionRange = 15;
                 this.color = 0x444444;
                 this.points = 100;
                 break;
 
             case 'warrior':
-                this.maxHealth = 50;
-                this.health = 50;
-                this.speed = 2.5;
-                this.attackDamage = 8;
+                this.maxHealth = 100;
+                this.health = 100;
+                this.speed = 3;
+                this.attackDamage = 20;
                 this.attackRange = 2.5;
-                this.attackSpeed = 0.6;
+                this.attackSpeed = 0.7;
                 this.detectionRange = 18;
                 this.color = 0x660000;
                 this.points = 200;
                 break;
 
             case 'assassin':
-                this.maxHealth = 20;
-                this.health = 20;
-                this.speed = 5;
-                this.attackDamage = 12;
+                this.maxHealth = 40;
+                this.health = 40;
+                this.speed = 7;
+                this.attackDamage = 30;
                 this.attackRange = 2;
                 this.attackSpeed = 1.0;
                 this.detectionRange = 25;
@@ -149,10 +149,10 @@ class Enemy {
                 break;
 
             case 'boss':
-                this.maxHealth = 150;
-                this.health = 150;
+                this.maxHealth = 500;
+                this.health = 500;
                 this.speed = 2.5;
-                this.attackDamage = 15;
+                this.attackDamage = 40;
                 this.attackRange = 4;
                 this.attackSpeed = 0.4;
                 this.detectionRange = 30;
@@ -161,12 +161,12 @@ class Enemy {
                 break;
 
             default:
-                this.maxHealth = 25;
-                this.health = 25;
-                this.speed = 3;
-                this.attackDamage = 5;
+                this.maxHealth = 50;
+                this.health = 50;
+                this.speed = 4;
+                this.attackDamage = 10;
                 this.attackRange = 2;
-                this.attackSpeed = 0.7;
+                this.attackSpeed = 1.0;
                 this.detectionRange = 15;
                 this.color = 0x444444;
                 this.points = 100;
