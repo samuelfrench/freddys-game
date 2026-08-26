@@ -1,7 +1,7 @@
 # Freddy's Game TODO
 
-## Active Analytics Instrumentation
-- [~] 2026-08-26: Add the assigned GA4 tag and prepared Google Search Console verification META tag to the document head, run unit/build/e2e verification, push through the existing deploy workflow, and verify the exact live tags plus `gtag/js` request without exposing the verification token.
+## Completed Analytics Instrumentation
+- [x] 2026-08-26: Added the assigned GA4 tag and prepared Google Search Console verification META tag to the document head in source commit `05db4a1`. Local verification passed 202/202 Vitest tests, production build, 10/10 Playwright campaign/climbing tests, exact source/dist tag checks, and inspected desktop/mobile browser interaction. GitHub Fly Deploy run `32960229945` passed for the exact source commit and produced Fly release `v9`, image `freddys-game:deployment-01M0YV2G2ZY92890CRFAG35HGB`; live HTTP and isolated Chromium desktop/mobile proved the exact expected META value, `G-3RY2VWTM2G` loader/config, one exact `gtag/js` request per viewport, a rendered interactive game canvas, 0 console/page/request failures, and no overflow. Verification token contents were never printed; GSC ownership verification remains intentionally deferred.
 
 ## Current State
 - [x] Three-level campaign: Moonlit Castle, Sunset Beach, Storm Reef Showdown.
