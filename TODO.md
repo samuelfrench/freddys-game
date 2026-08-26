@@ -1,5 +1,8 @@
 # Freddy's Game TODO
 
+## Active Analytics Instrumentation
+- [~] 2026-08-26: Add the assigned GA4 tag and prepared Google Search Console verification META tag to the document head, run unit/build/e2e verification, push through the existing deploy workflow, and verify the exact live tags plus `gtag/js` request without exposing the verification token.
+
 ## Current State
 - [x] Three-level campaign: Moonlit Castle, Sunset Beach, Storm Reef Showdown.
 - [x] Level 2 beach environment with sand, surf, palms, boardwalk, tide pools, and reef gate.
